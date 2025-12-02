@@ -4,8 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { 
   Search, ChevronLeft, Loader2, 
-  Database, 
-  ShieldCheck 
+  Database, ShieldCheck, Share2, Check 
 } from "lucide-react";
 
 // --- 1. 真实数据配置 ---
@@ -104,10 +103,46 @@ const APPS = [
 
 export default function AppStore() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [highlightedAppId, setHighlightedAppId] = useState<number | null>(null);
 
-  // --- 修复标题逻辑：在客户端组件加载时设置标题 ---
+  // --- 修复标题逻辑 & 处理 URL Hash 定位 ---
   useEffect(() => {
     document.title = "资源中心";
+
+    // 检查 URL Hash (例如: #app-5)
+    const handleHashChange = () => {
+      const hash = window.location.hash;
+      if (hash && hash.startsWith("#app-")) {
+        const appId = parseInt(hash.replace("#app-", ""), 10);
+        if (!isNaN(appId)) {
+          // 1. 设置高亮 ID
+          setHighlightedAppId(appId);
+          
+          // 2. 滚动到对应元素
+          const element = document.getElementById(`app-${appId}`);
+          if (element) {
+            // 延迟一点滚动，确保渲染完成，且带平滑效果
+            setTimeout(() => {
+              element.scrollIntoView({ behavior: "smooth", block: "center" });
+            }, 100);
+          }
+
+          // 3. 3秒后移除高亮效果
+          setTimeout(() => {
+            setHighlightedAppId(null);
+            // 可选：清除 URL hash，保持 URL 干净，或者保留以便刷新时仍在位置
+            // history.replaceState(null, "", " "); 
+          }, 3000);
+        }
+      }
+    };
+
+    // 初始化检查
+    handleHashChange();
+
+    // 监听 hash 变化（如果用户在页面内点击了其他锚点）
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
 
   const filteredApps = APPS.filter(app => 
@@ -140,7 +175,6 @@ export default function AppStore() {
               className="w-full bg-zinc-200/60 focus:bg-white border border-transparent focus:border-blue-500/20 rounded-xl py-2 pl-9 pr-4 text-sm outline-none transition-all duration-300 placeholder:text-zinc-500/80 shadow-inner md:shadow-none"
             />
           </div>
-
         </div>
       </header>
 
@@ -154,7 +188,11 @@ export default function AppStore() {
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
                 {filteredApps.map((app) => (
-                    <AppCard key={app.id} app={app} />
+                    <AppCard 
+                        key={app.id} 
+                        app={app} 
+                        isHighlighted={highlightedAppId === app.id}
+                    />
                 ))}
                 
                 {filteredApps.length === 0 && (
@@ -172,16 +210,31 @@ export default function AppStore() {
                 版权所有 © 2024 资源中心 保留所有权利
             </p>
         </footer>
+
       </main>
     </div>
   );
 }
 
 // --- 子组件：App 卡片 ---
-function AppCard({ app }: { app: typeof APPS[0] }) {
+function AppCard({ app, isHighlighted }: { app: typeof APPS[0], isHighlighted: boolean }) {
     return (
-        <div className="group bg-white p-3 md:p-4 rounded-2xl md:rounded-3xl shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] border border-zinc-100 md:hover:shadow-xl md:hover:shadow-zinc-200/50 md:hover:-translate-y-1 transition-all duration-300 flex items-center gap-3 md:gap-4 active:scale-[0.98]">
-            
+        <div 
+            id={`app-${app.id}`} // 添加 ID 供锚点定位
+            className={`
+                group relative bg-white p-3 md:p-4 rounded-2xl md:rounded-3xl 
+                border transition-all duration-500 flex items-center gap-3 md:gap-4
+                ${isHighlighted 
+                    ? "border-blue-400 shadow-[0_0_0_4px_rgba(59,130,246,0.2)] scale-[1.02] z-10" // 高亮样式
+                    : "border-zinc-100 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] md:hover:shadow-xl md:hover:shadow-zinc-200/50 md:hover:-translate-y-1"
+                }
+            `}
+        >
+            {/* 分享按钮 - 绝对定位在右上角 */}
+            <div className="absolute top-2 right-2 md:top-3 md:right-3 z-20">
+               <ShareButton appId={app.id} appName={app.name} />
+            </div>
+
             {/* Icon */}
             <div className="shrink-0 group-hover:scale-105 transition-transform duration-300">
                 {app.iconType === "image" ? (
@@ -198,7 +251,7 @@ function AppCard({ app }: { app: typeof APPS[0] }) {
             </div>
             
             {/* Text Info */}
-            <div className="flex-1 min-w-0 flex flex-col justify-center py-0.5">
+            <div className="flex-1 min-w-0 flex flex-col justify-center py-0.5 pr-6"> {/* pr-6 留出空间给分享按钮 */}
                 <h3 className="font-semibold text-base md:text-lg text-zinc-900 truncate leading-tight">{app.name}</h3>
                 <p className="text-[10px] md:text-xs text-zinc-400 font-medium mb-0.5 uppercase tracking-wide">{app.category}</p>
                 <p className="text-xs text-zinc-500 line-clamp-1 md:line-clamp-2 leading-relaxed hidden xs:block">{app.desc}</p>
@@ -213,6 +266,45 @@ function AppCard({ app }: { app: typeof APPS[0] }) {
             </div>
         </div>
     );
+}
+
+// --- 子组件：分享按钮 ---
+function ShareButton({ appId, appName }: { appId: number, appName: string }) {
+    const [copied, setCopied] = useState(false);
+
+    const handleShare = (e: React.MouseEvent) => {
+        e.preventDefault(); // 防止触发外层点击事件（如果有）
+        e.stopPropagation();
+
+        // 构建带 hash 的 URL
+        const url = `${window.location.origin}${window.location.pathname}#app-${appId}`;
+        
+        navigator.clipboard.writeText(url).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        }).catch(err => {
+            console.error("Failed to copy:", err);
+        });
+    };
+
+    return (
+        <button 
+            onClick={handleShare}
+            className="w-6 h-6 md:w-7 md:h-7 flex items-center justify-center rounded-full bg-zinc-50 hover:bg-blue-50 text-zinc-400 hover:text-blue-500 transition-colors cursor-pointer active:scale-90"
+            title={`分享 ${appName}`}
+        >
+            {copied ? (
+                <Check size={12} className="text-green-500" strokeWidth={3} />
+            ) : (
+                <ShareButtonIcon />
+            )}
+        </button>
+    );
+}
+
+// 简单的图标包装组件，防止 lucide 版本兼容问题
+function ShareButtonIcon() {
+    return <Share2 size={12} className="md:w-3.5 md:h-3.5" />;
 }
 
 // --- 子组件：GET 按钮 ---
