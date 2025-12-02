@@ -60,10 +60,10 @@ const TOOLS = [
   },
   // --- ✨ I've added the new tool here! ✨ ---
   {
-    id: "fb-cookie-injector-guide",
-    name: "Cookie 注入器",
-    desc: "详细了解如何使用 Facebook Cookie 注入器",
-    path: "https://1.584136.xyz/",
+    id: "fb-cookie-injector", // 建议 ID 也同步改为非 guide 后缀
+    name: "FB Cookie 注入器", // 文案更具体
+    desc: "支持 Netscape/JSON 格式 Cookie 一键注入，免密登录", // 强调功能性
+    path: "/facebook-cookie-injector",
     icon: <ArrowRight className="w-6 h-6 md:w-8 md:h-8 text-white" aria-hidden="true" />,
     color: "bg-purple-500",
   },
