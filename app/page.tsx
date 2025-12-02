@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   ],
   openGraph: {
     title: "Facebook 30天+ 满月老号 - ¥2.00/个",
-    description: "工作室一手货源，稳定耐用，筛选死号，Telegram 自动发货。",
+    description: "工作室一手货源，稳定耐用，筛选死号",
     type: "website",
     siteName: SITE_CONFIG.name, // 使用配置的名称
     locale: "zh_CN",
