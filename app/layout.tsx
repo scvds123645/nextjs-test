@@ -25,7 +25,7 @@ export default function RootLayout({
         
         {/* 51.la 统计代码 */}
         <script 
-          charset="UTF-8" 
+          charSet="UTF-8" 
           id="LA_COLLECT" 
           src="https://sdk.51.la/js-sdk-pro.min.js"
         />
