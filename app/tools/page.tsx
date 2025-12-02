@@ -26,7 +26,7 @@ export const metadata: Metadata = {
     width: "device-width",
     initialScale: 1,
     maximumScale: 1,
-    userScalable: false, // 辅助防止双击缩放
+    userScalable: false,
   },
   robots: { index: true, follow: true }
 };
@@ -103,10 +103,9 @@ const jsonLd = {
 
 export default function ToolsPage() {
   return (
-    // 优化：select-none 防止点击时文字变蓝
     <div 
       className="min-h-[100dvh] bg-[#F5F5F7] font-sans text-zinc-900 selection:bg-blue-500/20 flex flex-col pb-[env(safe-area-inset-bottom)] select-none"
-      // 优化：移除移动端默认点击高亮色 (灰色闪烁)
+      // 关键优化：内联样式移除移动端点击高亮，比 CSS 类更稳健
       style={{ WebkitTapHighlightColor: 'transparent' }}
     >
       
@@ -120,9 +119,19 @@ export default function ToolsPage() {
         <div className="max-w-5xl mx-auto px-4 md:px-6 h-14 md:h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
             
-            <Link href="/" aria-label="返回首页" className="group">
-              {/* 优化：active:scale-90 + duration-75 提供瞬间按压反馈 */}
-              <div className="w-8 h-8 md:w-10 md:h-10 bg-white rounded-xl shadow-sm border border-zinc-200 flex items-center justify-center text-zinc-900 shrink-0 group-hover:bg-zinc-50 group-hover:border-zinc-300 transition-all duration-200 active:scale-90 active:duration-75 touch-manipulation">
+            {/* 返回按钮优化 */}
+            <Link href="/" aria-label="返回首页" className="group outline-none">
+              {/* 
+                 按钮手感优化：
+                 1. active:bg-zinc-100: 按下时背景变灰
+                 2. active:scale-95: 缩放幅度调整为 0.95，比 0.90 更自然
+                 3. transform-gpu: 硬件加速
+              */}
+              <div className="w-8 h-8 md:w-10 md:h-10 bg-white rounded-xl shadow-sm border border-zinc-200 flex items-center justify-center text-zinc-900 shrink-0 
+                transition-all duration-200 ease-out
+                group-hover:bg-zinc-50 group-hover:border-zinc-300 
+                active:bg-zinc-100 active:scale-95 active:duration-75 
+                transform-gpu touch-manipulation">
                 <ChevronLeft className="w-5 h-5 md:w-6 md:h-6 text-zinc-600 group-hover:text-zinc-900" />
               </div>
             </Link>
@@ -147,23 +156,22 @@ export default function ToolsPage() {
               <Link 
                 href={tool.path} 
                 key={tool.id} 
-                className="group block h-full outline-none" // outline-none 去除焦点框
+                className="group block h-full outline-none focus:outline-none ring-0" // 移除所有焦点框
                 target={isExternal ? "_blank" : undefined}
                 rel={isExternal ? "noopener noreferrer" : undefined}
                 aria-label={`打开 ${tool.name}`}
               >
                 {/* 
-                   交互优化核心：
-                   1. touch-manipulation: 禁用 300ms 延迟
-                   2. active:scale-[0.97]: 按压幅度从 95 改为 97，更稳重不晃眼
-                   3. active:bg-zinc-100: 提供即时颜色反馈
-                   4. active:duration-75: 按下瞬间变态，回弹缓慢 (200ms)
+                   卡片手感终极优化：
+                   1. transform-gpu: 开启硬件加速，解决低端机动画卡顿
+                   2. active:scale-[0.98]: 极其微小的缩放 (0.98)，模拟 iOS 列表按压感，高级不跳跃
+                   3. active:bg-zinc-50: 按下时背景微变，提供视觉确认
                 */}
                 <article className="h-full bg-white rounded-2xl md:rounded-3xl p-4 md:p-6 border border-zinc-100 shadow-sm 
-                  transition-all duration-200 ease-out 
-                  active:scale-[0.97] active:bg-zinc-100 active:duration-75 
+                  transition-all duration-200 ease-out
+                  active:scale-[0.98] active:bg-zinc-50 active:duration-75 
                   hover:shadow-xl hover:shadow-zinc-200/60 hover:-translate-y-0.5 md:hover:-translate-y-1 hover:border-zinc-200 
-                  touch-manipulation
+                  transform-gpu touch-manipulation
                   flex flex-row md:flex-col items-center md:items-start md:justify-between gap-4 md:gap-0">
                   
                   {/* Icon */}
@@ -196,7 +204,8 @@ export default function ToolsPage() {
           })}
 
           {/* 占位卡片 */}
-          <div className="h-full border-2 border-dashed border-zinc-200 rounded-2xl md:rounded-3xl p-4 md:p-6 flex flex-row md:flex-col items-center justify-center md:text-center gap-3 opacity-60 hover:opacity-100 transition-opacity cursor-default min-h-[80px] md:min-h-[240px] active:scale-[0.98] active:duration-75 touch-manipulation">
+          <div className="h-full border-2 border-dashed border-zinc-200 rounded-2xl md:rounded-3xl p-4 md:p-6 flex flex-row md:flex-col items-center justify-center md:text-center gap-3 opacity-60 hover:opacity-100 transition-all cursor-default min-h-[80px] md:min-h-[240px] 
+            active:scale-[0.98] active:bg-zinc-50 active:duration-75 transform-gpu touch-manipulation select-none">
              <div className="w-10 h-10 md:w-12 md:h-12 bg-zinc-100 rounded-full flex items-center justify-center text-zinc-400 shrink-0">
                 <span className="text-lg md:text-xl font-bold">+</span>
              </div>

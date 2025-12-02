@@ -6,9 +6,20 @@ import {
 } from "lucide-react";
 import { Metadata } from "next";
 
+// --- 全局配置 (在此处修改你的网站名称) ---
+const SITE_CONFIG = {
+  name: "FB Shop", // 👈 在这里改成你的网站名字，例如 "Tom的号铺" 或 "FB 666"
+  logoHtml: (
+    // 👈 这里修改顶部 Logo 的显示样式
+    <span className="font-bold text-lg tracking-tight text-zinc-900">
+      FB<span className="text-blue-600">Shop</span>
+    </span>
+  )
+};
+
 // --- 1. SEO 元数据配置 ---
 export const metadata: Metadata = {
-  title: "Facebook老号购买 | 30天满月白号 | FB Store 自动发货",
+  title: `Facebook老号购买 | 30天满月白号 | ${SITE_CONFIG.name} 自动发货`,
   description: "提供稳定耐用的Facebook 30天+老白号，包含Cookie可直登，适合广告投放与业务推广。纯净IP注册，支持指纹浏览器，Telegram自动发货。",
   keywords: [
     "Facebook账号购买", "FB老号", "Facebook满月号", "FB耐用号", "Facebook cookie号"
@@ -17,7 +28,7 @@ export const metadata: Metadata = {
     title: "Facebook 30天+ 满月老号 - ¥2.00/个",
     description: "工作室一手货源，稳定耐用，筛选死号，Telegram 自动发货。",
     type: "website",
-    siteName: "FB Store",
+    siteName: SITE_CONFIG.name, // 使用配置的名称
     locale: "zh_CN",
   },
   viewport: {
@@ -82,9 +93,8 @@ export default function Page() {
           <div className="w-8 h-8 bg-white rounded-xl shadow-sm border border-zinc-200/50 flex items-center justify-center text-zinc-900">
             <Globe size={18} className="text-blue-600" aria-hidden="true" />
           </div>
-          <span className="font-bold text-lg tracking-tight text-zinc-900">
-            FB<span className="text-zinc-400">.Store</span>
-          </span>
+          {/* 引用全局配置的 Logo */}
+          {SITE_CONFIG.logoHtml}
         </div>
         
         <a 
@@ -104,7 +114,6 @@ export default function Page() {
         <div className="text-center space-y-3 mb-6 w-full max-w-xs mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700">
           <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100/80 text-blue-700 text-[10px] font-bold uppercase tracking-widest backdrop-blur-sm">
             <Sparkles size={10} aria-hidden="true" />
-            {/* 汉化：Premium Stock -> 精选货源 */}
             精选货源
           </div>
           
@@ -200,10 +209,10 @@ export default function Page() {
 
       {/* 页脚 */}
       <footer className="pb-8 sm:pb-10 flex flex-col items-center gap-4 text-[10px] text-zinc-400 font-medium">
-        {/* 汉化：Mobile Optimized -> 7x24小时自动发货 */}
-        <p>© 2024 FB Store · 7x24小时自动发货</p>
         
-        {/* 汉化：Efficiency Tools -> 效率工具箱 */}
+        {/* 引用全局配置的名称 */}
+        <p>© 2024 {SITE_CONFIG.name} · 7x24小时自动发货</p>
+        
         <Link 
           href="/tools" 
           className="group flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/60 border border-zinc-200/60 text-zinc-400 hover:text-blue-600 hover:bg-white hover:border-blue-200 active:scale-95 transition-all shadow-sm"
