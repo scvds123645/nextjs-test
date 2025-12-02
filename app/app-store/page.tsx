@@ -4,10 +4,10 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { 
   Search, ChevronLeft, Loader2, 
-  Database, ShieldCheck, Share2, Check, Copy 
+  Database, ShieldCheck, Share2, Check 
 } from "lucide-react";
 
-// --- 数据配置 (保持不变) ---
+// --- 1. 数据配置 (保持不变) ---
 const APPS = [
   {
     id: 1,
@@ -117,7 +117,7 @@ export default function AppStore() {
           if (element) {
             setTimeout(() => {
               element.scrollIntoView({ behavior: "smooth", block: "center" });
-            }, 300); // 增加一点延迟，确保移动端页面完全展开
+            }, 300);
           }
           setTimeout(() => setHighlightedAppId(null), 3000);
         }
@@ -136,18 +136,18 @@ export default function AppStore() {
   return (
     <div className="min-h-screen bg-[#F5F5F7] font-sans text-zinc-900 selection:bg-blue-500/20 pb-[env(safe-area-inset-bottom)]">
       
-      {/* --- Header (移动端优化：更紧凑的布局) --- */}
+      {/* --- Header --- */}
       <header className="sticky top-0 z-50 bg-[#F5F5F7]/90 backdrop-blur-xl border-b border-zinc-200/60">
         <div className="max-w-6xl mx-auto px-4 h-14 md:h-16 flex items-center gap-2 md:gap-3">
           
-          {/* 返回按钮 (增大点击区域) */}
+          {/* 返回按钮 */}
           <Link href="/tools" className="active:scale-90 transition-transform touch-manipulation">
             <div className="w-9 h-9 bg-white hover:bg-zinc-50 border border-zinc-200 rounded-xl flex items-center justify-center text-zinc-600 shadow-sm">
                 <ChevronLeft size={22} className="relative -left-[1px]" />
             </div>
           </Link>
           
-          {/* 搜索框 (移动端全宽) */}
+          {/* 搜索框 */}
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
             <input 
@@ -170,7 +170,6 @@ export default function AppStore() {
                 <span className="text-xs text-zinc-400 font-medium">{filteredApps.length} 个应用</span>
             </div>
             
-            {/* Grid: 移动端单列，平板双列，桌面三列 */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-5">
                 {filteredApps.map((app) => (
                     <AppCard 
@@ -200,7 +199,7 @@ export default function AppStore() {
   );
 }
 
-// --- 适配版卡片组件 ---
+// --- 修复后的 AppCard 组件 ---
 function AppCard({ app, isHighlighted }: { app: typeof APPS[0], isHighlighted: boolean }) {
     return (
         <div 
@@ -215,16 +214,12 @@ function AppCard({ app, isHighlighted }: { app: typeof APPS[0], isHighlighted: b
                 }
             `}
         >
-            {/* 
-                分享按钮 
-                - 移动端：增大可点击区域，放置在右上角
-                - 交互：不占用文档流，悬浮显示 
-            */}
+            {/* 分享按钮 - 保持在右上角 */}
             <div className="absolute top-0 right-0 p-2 z-20">
                <ShareButton appId={app.id} appName={app.name} />
             </div>
 
-            {/* Icon: 移动端固定 60px, 桌面稍大 */}
+            {/* Icon */}
             <div className="shrink-0">
                 {app.iconType === "image" ? (
                     <img 
@@ -241,14 +236,15 @@ function AppCard({ app, isHighlighted }: { app: typeof APPS[0], isHighlighted: b
             
             {/* 
                 Text Info 
-                - pr-9: 为右上角的分享按钮留出空间，防止文字重叠 
-                - min-w-0: 防止 flex 子项溢出
+                修改：
+                1. pr-7: 稍微减小右侧内边距，给文字更多空间，但仍避开右上角按钮。
+                2. line-clamp-2: 允许显示 2 行，解决显示不全的问题。
             */}
-            <div className="flex-1 min-w-0 flex flex-col justify-center pr-9"> 
+            <div className="flex-1 min-w-0 flex flex-col justify-center pr-7"> 
                 <h3 className="font-bold text-[15px] md:text-lg text-zinc-900 truncate">{app.name}</h3>
                 <p className="text-[10px] md:text-xs text-zinc-400 font-medium uppercase tracking-wider mb-0.5">{app.category}</p>
-                {/* 移动端显示 1 行简介，保持界面清爽 */}
-                <p className="text-xs text-zinc-500 line-clamp-1 leading-relaxed">{app.desc}</p>
+                {/* 这里改为 line-clamp-2 确保文字完整显示 */}
+                <p className="text-xs text-zinc-500 line-clamp-2 leading-[1.35]">{app.desc}</p>
             </div>
             
             {/* Action Button */}
@@ -259,7 +255,7 @@ function AppCard({ app, isHighlighted }: { app: typeof APPS[0], isHighlighted: b
     );
 }
 
-// --- 智能分享按钮 (原生 + 剪贴板降级) ---
+// --- 智能分享按钮 ---
 function ShareButton({ appId, appName }: { appId: number, appName: string }) {
     const [status, setStatus] = useState<"idle" | "copied">("idle");
 
@@ -274,18 +270,15 @@ function ShareButton({ appId, appName }: { appId: number, appName: string }) {
             url: url
         };
 
-        // 1. 尝试调用手机原生分享菜单
         if (navigator.share) {
             try {
                 await navigator.share(shareData);
-                return; // 如果分享成功，直接返回，不需要显示"已复制"
+                return; 
             } catch (err) {
-                // 用户取消分享或不支持，继续执行下面的复制逻辑
                 console.log("Share cancelled or failed, falling back to copy");
             }
         }
 
-        // 2. 降级方案：复制到剪贴板
         navigator.clipboard.writeText(url).then(() => {
             setStatus("copied");
             setTimeout(() => setStatus("idle"), 2000);
@@ -303,14 +296,13 @@ function ShareButton({ appId, appName }: { appId: number, appName: string }) {
             {status === "copied" ? (
                 <Check size={14} className="text-green-500 font-bold" />
             ) : (
-                // 在移动端，如果支持 navigator.share，通常显示分享图标会更直观
                 <Share2 size={16} strokeWidth={2.5} />
             )}
         </button>
     );
 }
 
-// --- GET 按钮 (适配触摸) ---
+// --- GET 按钮 ---
 function GetButton({ label = "获取", downloadLink }: { label?: string, downloadLink: string }) {
     const [status, setStatus] = useState<"idle" | "loading" | "done">("idle");
 
@@ -332,7 +324,7 @@ function GetButton({ label = "获取", downloadLink }: { label?: string, downloa
                 relative overflow-hidden font-bold text-xs tracking-wide rounded-full transition-all duration-300
                 flex items-center justify-center select-none shadow-sm
                 ${status === "idle" 
-                    ? "bg-[#F2F2F7] text-[#007AFF] active:bg-[#E5E5EA] w-[4.2rem] h-[1.75rem]" // iOS 风格按钮颜色
+                    ? "bg-[#F2F2F7] text-[#007AFF] active:bg-[#E5E5EA] w-[4.2rem] h-[1.75rem]" 
                     : ""}
                 ${status === "loading" 
                     ? "w-[1.75rem] h-[1.75rem] bg-[#F2F2F7] cursor-wait" 
