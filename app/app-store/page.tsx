@@ -4,10 +4,10 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { 
   Search, ChevronLeft, Loader2, 
-  Database, ShieldCheck, Share2, Check 
+  Database, ShieldCheck, Share2, Check, Copy 
 } from "lucide-react";
 
-// --- 1. 真实数据配置 ---
+// --- 数据配置 (保持不变) ---
 const APPS = [
   {
     id: 1,
@@ -105,42 +105,25 @@ export default function AppStore() {
   const [searchTerm, setSearchTerm] = useState("");
   const [highlightedAppId, setHighlightedAppId] = useState<number | null>(null);
 
-  // --- 修复标题逻辑 & 处理 URL Hash 定位 ---
   useEffect(() => {
     document.title = "资源中心";
-
-    // 检查 URL Hash (例如: #app-5)
     const handleHashChange = () => {
       const hash = window.location.hash;
       if (hash && hash.startsWith("#app-")) {
         const appId = parseInt(hash.replace("#app-", ""), 10);
         if (!isNaN(appId)) {
-          // 1. 设置高亮 ID
           setHighlightedAppId(appId);
-          
-          // 2. 滚动到对应元素
           const element = document.getElementById(`app-${appId}`);
           if (element) {
-            // 延迟一点滚动，确保渲染完成，且带平滑效果
             setTimeout(() => {
               element.scrollIntoView({ behavior: "smooth", block: "center" });
-            }, 100);
+            }, 300); // 增加一点延迟，确保移动端页面完全展开
           }
-
-          // 3. 3秒后移除高亮效果
-          setTimeout(() => {
-            setHighlightedAppId(null);
-            // 可选：清除 URL hash，保持 URL 干净，或者保留以便刷新时仍在位置
-            // history.replaceState(null, "", " "); 
-          }, 3000);
+          setTimeout(() => setHighlightedAppId(null), 3000);
         }
       }
     };
-
-    // 初始化检查
     handleHashChange();
-
-    // 监听 hash 变化（如果用户在页面内点击了其他锚点）
     window.addEventListener("hashchange", handleHashChange);
     return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
@@ -153,40 +136,42 @@ export default function AppStore() {
   return (
     <div className="min-h-screen bg-[#F5F5F7] font-sans text-zinc-900 selection:bg-blue-500/20 pb-[env(safe-area-inset-bottom)]">
       
-      {/* --- Header --- */}
-      <header className="sticky top-0 z-50 bg-[#F5F5F7]/85 backdrop-blur-md border-b border-zinc-200/60 supports-[backdrop-filter]:bg-[#F5F5F7]/60">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 md:h-16 flex items-center gap-3">
+      {/* --- Header (移动端优化：更紧凑的布局) --- */}
+      <header className="sticky top-0 z-50 bg-[#F5F5F7]/90 backdrop-blur-xl border-b border-zinc-200/60">
+        <div className="max-w-6xl mx-auto px-4 h-14 md:h-16 flex items-center gap-2 md:gap-3">
           
-          {/* 返回按钮 */}
-          <Link href="/tools" className="active:scale-95 transition-transform">
-            <div className="w-8 h-8 md:w-9 md:h-9 bg-white hover:bg-zinc-50 border border-zinc-200 rounded-lg flex items-center justify-center text-zinc-600 shrink-0 shadow-sm transition-colors">
-                <ChevronLeft size={20} className="md:w-5 md:h-5 relative -left-[1px]" />
+          {/* 返回按钮 (增大点击区域) */}
+          <Link href="/tools" className="active:scale-90 transition-transform touch-manipulation">
+            <div className="w-9 h-9 bg-white hover:bg-zinc-50 border border-zinc-200 rounded-xl flex items-center justify-center text-zinc-600 shadow-sm">
+                <ChevronLeft size={22} className="relative -left-[1px]" />
             </div>
           </Link>
           
-          {/* 搜索框 */}
-          <div className="relative group flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-blue-500 transition-colors" size={16} />
+          {/* 搜索框 (移动端全宽) */}
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
             <input 
               type="text" 
-              placeholder="搜索应用、资源..." 
+              placeholder="搜索资源..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-zinc-200/60 focus:bg-white border border-transparent focus:border-blue-500/20 rounded-xl py-2 pl-9 pr-4 text-sm outline-none transition-all duration-300 placeholder:text-zinc-500/80 shadow-inner md:shadow-none"
+              className="w-full h-10 bg-zinc-200/60 focus:bg-white border border-transparent focus:border-blue-500/20 rounded-xl pl-10 pr-4 text-[15px] outline-none transition-all placeholder:text-zinc-500/70"
             />
           </div>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-8">
+      <main className="max-w-6xl mx-auto px-4 py-4 space-y-6">
         
         {/* --- App List Section --- */}
         <section className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <div className="mb-4 px-1">
-                <h2 className="text-xl md:text-2xl font-bold text-zinc-900 tracking-tight">热门推荐</h2>
+            <div className="mb-3 px-1 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-zinc-900">热门推荐</h2>
+                <span className="text-xs text-zinc-400 font-medium">{filteredApps.length} 个应用</span>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+            {/* Grid: 移动端单列，平板双列，桌面三列 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-5">
                 {filteredApps.map((app) => (
                     <AppCard 
                         key={app.id} 
@@ -196,18 +181,17 @@ export default function AppStore() {
                 ))}
                 
                 {filteredApps.length === 0 && (
-                    <div className="col-span-full py-12 text-center flex flex-col items-center justify-center text-zinc-400">
+                    <div className="col-span-full py-16 text-center flex flex-col items-center justify-center text-zinc-400">
                         <Search size={48} className="opacity-20 mb-4" />
-                        <p>未找到与 "{searchTerm}" 匹配的内容</p>
+                        <p className="text-sm">未找到相关应用</p>
                     </div>
                 )}
             </div>
         </section>
 
-        {/* Footer */}
-        <footer className="pt-8 pb-12 border-t border-zinc-200 text-center">
-            <p className="text-xs text-zinc-400">
-                版权所有 © 2024 资源中心 保留所有权利
+        <footer className="pt-6 pb-12 text-center">
+            <p className="text-[10px] text-zinc-400/80 transform scale-90">
+                © 2024 资源中心
             </p>
         </footer>
 
@@ -216,130 +200,145 @@ export default function AppStore() {
   );
 }
 
-// --- 子组件：App 卡片 ---
+// --- 适配版卡片组件 ---
 function AppCard({ app, isHighlighted }: { app: typeof APPS[0], isHighlighted: boolean }) {
     return (
         <div 
-            id={`app-${app.id}`} // 添加 ID 供锚点定位
+            id={`app-${app.id}`} 
             className={`
-                group relative bg-white p-3 md:p-4 rounded-2xl md:rounded-3xl 
-                border transition-all duration-500 flex items-center gap-3 md:gap-4
+                group relative bg-white p-3.5 rounded-[1.25rem] 
+                border transition-all duration-500 flex items-center gap-3.5
+                active:scale-[0.99] touch-manipulation
                 ${isHighlighted 
-                    ? "border-blue-400 shadow-[0_0_0_4px_rgba(59,130,246,0.2)] scale-[1.02] z-10" // 高亮样式
-                    : "border-zinc-100 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] md:hover:shadow-xl md:hover:shadow-zinc-200/50 md:hover:-translate-y-1"
+                    ? "border-blue-500 shadow-[0_0_0_2px_rgba(59,130,246,0.2)] z-10" 
+                    : "border-zinc-100 shadow-[0_1px_2px_rgba(0,0,0,0.03)]"
                 }
             `}
         >
-            {/* 分享按钮 - 绝对定位在右上角 */}
-            <div className="absolute top-2 right-2 md:top-3 md:right-3 z-20">
+            {/* 
+                分享按钮 
+                - 移动端：增大可点击区域，放置在右上角
+                - 交互：不占用文档流，悬浮显示 
+            */}
+            <div className="absolute top-0 right-0 p-2 z-20">
                <ShareButton appId={app.id} appName={app.name} />
             </div>
 
-            {/* Icon */}
-            <div className="shrink-0 group-hover:scale-105 transition-transform duration-300">
+            {/* Icon: 移动端固定 60px, 桌面稍大 */}
+            <div className="shrink-0">
                 {app.iconType === "image" ? (
                     <img 
                         src={app.iconSrc!} 
                         alt={app.name} 
-                        className="w-16 h-16 md:w-20 md:h-20 rounded-xl md:rounded-[1.2rem] shadow-md shadow-zinc-200 object-cover bg-zinc-50"
+                        className="w-[3.75rem] h-[3.75rem] md:w-20 md:h-20 rounded-[0.9rem] md:rounded-[1.2rem] shadow-sm border border-zinc-100/50 object-cover bg-zinc-50"
                     />
                 ) : (
-                    <div className="w-16 h-16 md:w-20 md:h-20 rounded-xl md:rounded-[1.2rem] bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center shadow-md shadow-zinc-200 text-white">
-                        <Database size={32} />
+                    <div className="w-[3.75rem] h-[3.75rem] md:w-20 md:h-20 rounded-[0.9rem] md:rounded-[1.2rem] bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white shadow-sm">
+                        <Database size={28} />
                     </div>
                 )}
             </div>
             
-            {/* Text Info */}
-            <div className="flex-1 min-w-0 flex flex-col justify-center py-0.5 pr-6"> {/* pr-6 留出空间给分享按钮 */}
-                <h3 className="font-semibold text-base md:text-lg text-zinc-900 truncate leading-tight">{app.name}</h3>
-                <p className="text-[10px] md:text-xs text-zinc-400 font-medium mb-0.5 uppercase tracking-wide">{app.category}</p>
-                <p className="text-xs text-zinc-500 line-clamp-1 md:line-clamp-2 leading-relaxed hidden xs:block">{app.desc}</p>
+            {/* 
+                Text Info 
+                - pr-9: 为右上角的分享按钮留出空间，防止文字重叠 
+                - min-w-0: 防止 flex 子项溢出
+            */}
+            <div className="flex-1 min-w-0 flex flex-col justify-center pr-9"> 
+                <h3 className="font-bold text-[15px] md:text-lg text-zinc-900 truncate">{app.name}</h3>
+                <p className="text-[10px] md:text-xs text-zinc-400 font-medium uppercase tracking-wider mb-0.5">{app.category}</p>
+                {/* 移动端显示 1 行简介，保持界面清爽 */}
+                <p className="text-xs text-zinc-500 line-clamp-1 leading-relaxed">{app.desc}</p>
             </div>
             
             {/* Action Button */}
             <div className="shrink-0 flex flex-col items-center justify-center pl-1">
                  <GetButton label={app.price} downloadLink={app.link} />
-                 <span className="text-[9px] md:text-[10px] text-zinc-400 mt-1 font-medium scale-90 md:scale-100 origin-top flex items-center gap-0.5">
-                    <ShieldCheck size={10} /> 安全认证
-                 </span>
             </div>
         </div>
     );
 }
 
-// --- 子组件：分享按钮 ---
+// --- 智能分享按钮 (原生 + 剪贴板降级) ---
 function ShareButton({ appId, appName }: { appId: number, appName: string }) {
-    const [copied, setCopied] = useState(false);
+    const [status, setStatus] = useState<"idle" | "copied">("idle");
 
-    const handleShare = (e: React.MouseEvent) => {
-        e.preventDefault(); // 防止触发外层点击事件（如果有）
+    const handleShare = async (e: React.MouseEvent) => {
+        e.preventDefault();
         e.stopPropagation();
 
-        // 构建带 hash 的 URL
         const url = `${window.location.origin}${window.location.pathname}#app-${appId}`;
-        
+        const shareData = {
+            title: `推荐资源: ${appName}`,
+            text: `我在资源中心发现了 ${appName}，快来看看！`,
+            url: url
+        };
+
+        // 1. 尝试调用手机原生分享菜单
+        if (navigator.share) {
+            try {
+                await navigator.share(shareData);
+                return; // 如果分享成功，直接返回，不需要显示"已复制"
+            } catch (err) {
+                // 用户取消分享或不支持，继续执行下面的复制逻辑
+                console.log("Share cancelled or failed, falling back to copy");
+            }
+        }
+
+        // 2. 降级方案：复制到剪贴板
         navigator.clipboard.writeText(url).then(() => {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        }).catch(err => {
-            console.error("Failed to copy:", err);
+            setStatus("copied");
+            setTimeout(() => setStatus("idle"), 2000);
+        }).catch(() => {
+            alert("复制失败，请手动复制链接");
         });
     };
 
     return (
         <button 
             onClick={handleShare}
-            className="w-6 h-6 md:w-7 md:h-7 flex items-center justify-center rounded-full bg-zinc-50 hover:bg-blue-50 text-zinc-400 hover:text-blue-500 transition-colors cursor-pointer active:scale-90"
-            title={`分享 ${appName}`}
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-transparent hover:bg-zinc-100 text-zinc-300 hover:text-zinc-600 transition-colors active:scale-90 active:bg-zinc-200"
+            title="分享"
         >
-            {copied ? (
-                <Check size={12} className="text-green-500" strokeWidth={3} />
+            {status === "copied" ? (
+                <Check size={14} className="text-green-500 font-bold" />
             ) : (
-                <ShareButtonIcon />
+                // 在移动端，如果支持 navigator.share，通常显示分享图标会更直观
+                <Share2 size={16} strokeWidth={2.5} />
             )}
         </button>
     );
 }
 
-// 简单的图标包装组件，防止 lucide 版本兼容问题
-function ShareButtonIcon() {
-    return <Share2 size={12} className="md:w-3.5 md:h-3.5" />;
-}
-
-// --- 子组件：GET 按钮 ---
+// --- GET 按钮 (适配触摸) ---
 function GetButton({ label = "获取", downloadLink }: { label?: string, downloadLink: string }) {
     const [status, setStatus] = useState<"idle" | "loading" | "done">("idle");
 
     const handleClick = () => {
         if (status !== "idle") return;
-        
         setStatus("loading");
         
         setTimeout(() => {
             setStatus("done");
             window.open(downloadLink, '_blank');
-            
-            setTimeout(() => {
-                setStatus("idle");
-            }, 3000);
-        }, 800); 
+            setTimeout(() => setStatus("idle"), 3000);
+        }, 600); 
     };
 
     return (
         <button
             onClick={handleClick}
             className={`
-                relative overflow-hidden font-bold text-xs md:text-sm tracking-wide rounded-full transition-all duration-500
-                flex items-center justify-center select-none
+                relative overflow-hidden font-bold text-xs tracking-wide rounded-full transition-all duration-300
+                flex items-center justify-center select-none shadow-sm
                 ${status === "idle" 
-                    ? "bg-zinc-100 text-blue-600 hover:bg-blue-100 w-[4.5rem] h-7 md:w-20 md:h-8 active:scale-90" 
+                    ? "bg-[#F2F2F7] text-[#007AFF] active:bg-[#E5E5EA] w-[4.2rem] h-[1.75rem]" // iOS 风格按钮颜色
                     : ""}
                 ${status === "loading" 
-                    ? "w-7 h-7 md:w-8 md:h-8 bg-zinc-100 cursor-wait" 
+                    ? "w-[1.75rem] h-[1.75rem] bg-[#F2F2F7] cursor-wait" 
                     : ""}
                 ${status === "done" 
-                    ? "bg-transparent text-zinc-400 ring-1 md:ring-2 ring-inset ring-zinc-200 w-[4.5rem] h-7 md:w-20 md:h-8 cursor-default" 
+                    ? "bg-transparent text-zinc-400 ring-1 ring-inset ring-zinc-200 w-[4.2rem] h-[1.75rem]" 
                     : ""}
             `}
         >
@@ -347,11 +346,10 @@ function GetButton({ label = "获取", downloadLink }: { label?: string, downloa
                 {label}
             </span>
             <Loader2 
-                className={`absolute animate-spin text-zinc-400 transition-all duration-300 ${status === "loading" ? "opacity-100 scale-100" : "opacity-0 scale-50"}`} 
+                className={`absolute animate-spin text-zinc-400 ${status === "loading" ? "opacity-100" : "opacity-0"}`} 
                 size={14} 
-                strokeWidth={3}
             />
-            <span className={`absolute transition-all duration-300 ${status === "done" ? "opacity-100 scale-100 font-semibold" : "opacity-0 scale-150"}`}>
+            <span className={`absolute text-[10px] transition-all duration-300 ${status === "done" ? "opacity-100 scale-100" : "opacity-0 scale-150"}`}>
                 打开
             </span>
         </button>
