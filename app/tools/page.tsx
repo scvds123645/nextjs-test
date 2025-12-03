@@ -37,11 +37,11 @@ const tools: ToolItem[] = [
     color: "from-rose-500 to-orange-400",
   },
   {
-    path: "/cookie-converter",
-    title: "Cookie 转换",
-    desc: "JSON/Netscape 格式互转，适配多环境。",
-    icon: RefreshCcw,
-    color: "from-emerald-500 to-teal-400",
+    path: "/number-extractor",
+    title: "数值提取器",
+    desc: "从复杂非结构化文本中快速清洗提取数字。",
+    icon: Hash,
+    color: "from-violet-500 to-purple-400",
   },
   {
     path: "/facebook-cookie-injector",
@@ -52,11 +52,11 @@ const tools: ToolItem[] = [
     span: "col-span-2", // 强调项，占据整行
   },
   {
-    path: "/number-extractor",
-    title: "数值提取器",
-    desc: "从复杂非结构化文本中快速清洗提取数字。",
-    icon: Hash,
-    color: "from-violet-500 to-purple-400",
+    path: "/cookie-converter",
+    title: "Cookie 转换",
+    desc: "JSON/Netscape 格式互转，适配多环境。",
+    icon: RefreshCcw,
+    color: "from-emerald-500 to-teal-400",
   },
   {
     path: "/cookie-filter",
