@@ -40,7 +40,7 @@ const pigResults: PigResult[] = [
 export default function PigTestPage() {
   const [progress, setProgress] = useState(0);
   const [isHolding, setIsHolding] = useState(false);
-  const [hasTried, setHasTried] = useState(false); // 新增状态：是否尝试过（用于切换提示语）
+  const [hasTried, setHasTried] = useState(false);
   const [result, setResult] = useState<PigResult | null>(null);
   const [showResultAnimation, setShowResultAnimation] = useState(false);
   
@@ -51,7 +51,7 @@ export default function PigTestPage() {
   const radius = 85;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (progress / 100) * circumference;
-  const requiredHoldTime = 3000; // 3秒
+  const requiredHoldTime = 3000;
 
   // 初始化：检查本地存储
   useEffect(() => {
@@ -59,6 +59,8 @@ export default function PigTestPage() {
       const savedResult = localStorage.getItem('pigTestResult');
       if (savedResult) {
         setResult(JSON.parse(savedResult));
+        // 【关键修复】读取到结果时，必须直接显示动画，否则默认为 opacity-0
+        setShowResultAnimation(true);
       }
     } catch (error) {
       console.error('读取本地存储失败:', error);
@@ -113,7 +115,7 @@ export default function PigTestPage() {
     if (result) return;
     
     setIsHolding(true);
-    setHasTried(true); // 标记用户已经尝试过按压
+    setHasTried(true);
     startTimeRef.current = Date.now();
 
     if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
@@ -280,8 +282,6 @@ export default function PigTestPage() {
                 <h2 className="text-2xl font-bold text-gray-800 mb-2">{result.name}</h2>
                 <p className="text-gray-600">{result.description}</p>
               </div>
-
-              {/* 重新测试按钮已被移除 */}
 
               <p className="text-gray-500 text-sm mt-4">
                 提示：结果已保存，刷新不会改变哦！
