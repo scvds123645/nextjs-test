@@ -6,15 +6,16 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
   AppWindow,
-  RefreshCcw,
-  Filter,
+  // RefreshCcw, // 未使用，可根据需要保留或删除
+  // Filter, // 未使用
   Facebook,
   Hash,
   CopyMinus,
   Sparkles,
   ChevronRight,
   Database,
-  ShieldCheck, // 引入新图标
+  ShieldCheck,
+  UserCheck, // [新增] 引入用于 UID 检测的图标
 } from "lucide-react";
 
 // --- Types ---
@@ -50,13 +51,12 @@ const tools: ToolItem[] = [
     icon: Hash,
     color: "from-violet-500 to-purple-400",
   },
-  // --- 新增 2FA 工具 ---
   {
     path: "/2fa",
     title: "2FA 验证器",
     desc: "极简 TOTP 生成工具，支持密钥导入与快捷访问。",
     icon: ShieldCheck,
-    color: "from-emerald-500 to-green-400", // 绿色代表安全
+    color: "from-emerald-500 to-green-400",
   },
   {
     path: "/facebook-cookie-injector",
@@ -73,13 +73,20 @@ const tools: ToolItem[] = [
     icon: Database,
     color: "from-blue-500 to-cyan-400",
   },
+  // --- [新增] FB UID 检测工具 ---
+  {
+    path: "https://3.584136.xyz", // 外部链接
+    title: "FB UID 存活检测",
+    desc: "批量筛选 Live/Die 账号，无需登录，极速验证。",
+    icon: UserCheck,
+    color: "from-sky-500 to-indigo-500", // 保持 FB 风格但略有区分
+  },
 ];
 
 // --- Utilities ---
 
 /**
  * 触发轻微的触觉反馈
- * 仅在支持的移动设备上生效，参数 10ms 提供极其短促清晰的反馈
  */
 const triggerHaptic = () => {
   if (typeof navigator !== "undefined" && navigator.vibrate) {
@@ -96,7 +103,7 @@ export default function ToolsPage() {
       {/* 移动端视窗限制容器 */}
       <div className="w-full max-w-md relative flex flex-col pb-10">
         
-        {/* 背景装饰：环境光 (Ambient Light) - 保持静态 */}
+        {/* 背景装饰 */}
         <div className="fixed top-[-20%] left-[-20%] w-[80%] h-[50%] bg-purple-900/20 blur-[100px] rounded-full pointer-events-none" />
         <div className="fixed bottom-[-10%] right-[-10%] w-[60%] h-[40%] bg-blue-900/10 blur-[80px] rounded-full pointer-events-none" />
 
@@ -169,11 +176,15 @@ export default function ToolsPage() {
 }
 
 // --- Sub Component: Tool Card ---
-// 抽离组件以保持主逻辑清晰，并独立处理复杂的 Hover/Tap 状态
 function ToolCard({ tool, index }: { tool: ToolItem; index: number }) {
+  // 判断是否为外部链接
+  const isExternal = tool.path.startsWith("http");
+
   return (
     <MotionLink
       href={tool.path}
+      target={isExternal ? "_blank" : undefined} // 外部链接新标签页打开
+      rel={isExternal ? "noopener noreferrer" : undefined} // 安全属性
       className={`relative ${tool.span || "col-span-1"} rounded-2xl overflow-hidden`}
       // 1. Physics-Based Animations
       initial={{ opacity: 0, scale: 0.95 }}
@@ -182,34 +193,29 @@ function ToolCard({ tool, index }: { tool: ToolItem; index: number }) {
         type: "spring", 
         stiffness: 300, 
         damping: 20,
-        delay: index * 0.05 // 瀑布流入场
+        delay: index * 0.05
       }}
-      // 2. Interaction State (Hover & Tap)
+      // 2. Interaction State
       whileHover={{ 
         y: -4, 
         transition: { type: "spring", stiffness: 300, damping: 15 } 
       }}
       whileTap={{ 
         scale: 0.95,
-        transition: { type: "spring", stiffness: 400, damping: 17 } // 刚性回弹，模拟真实按键
+        transition: { type: "spring", stiffness: 400, damping: 17 }
       }}
       // 3. Haptic Feedback Trigger
       onTapStart={triggerHaptic}
     >
-      {/* 
-         Visual Enhancements (Active State): 
-         使用 motion.div 包装内部容器，以便针对 borderColor 和 backgroundColor 进行动画处理
-      */}
       <motion.div
         className="relative h-full bg-[#111111]/80 backdrop-blur-md p-4 border border-white/5"
-        // 动画属性：边框闪烁 & 背景加深
         whileTap={{
-          borderColor: "rgba(255, 255, 255, 0.4)", // Border Flash
-          backgroundColor: "rgba(20, 20, 20, 0.95)", // Inner Glow / Press Effect
+          borderColor: "rgba(255, 255, 255, 0.4)",
+          backgroundColor: "rgba(20, 20, 20, 0.95)",
         }}
         transition={{ duration: 0.1 }}
       >
-        {/* 悬停时的微光效果 (仅在支持 hover 的设备显示) */}
+        {/* 悬停微光 */}
         <div className={`absolute -right-12 -top-12 w-24 h-24 bg-gradient-to-br ${tool.color} blur-[50px] opacity-0 hover:opacity-20 transition-opacity duration-500 pointer-events-none`} />
 
         <div className="flex flex-col h-full justify-between gap-3 relative z-10">
@@ -221,7 +227,6 @@ function ToolCard({ tool, index }: { tool: ToolItem; index: number }) {
               <tool.icon className="w-5 h-5" strokeWidth={2.5} />
             </div>
 
-            {/* 装饰箭头 */}
             <ChevronRight className="w-4 h-4 text-zinc-700 transition-colors" />
           </div>
 
