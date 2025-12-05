@@ -15,6 +15,7 @@ export default function AppleStyleDynamic2FA({ params }: { params: Promise<{ sec
 
   useEffect(() => {
     setMounted(true);
+
     const calculate = () => {
       const now = new Date();
       setTimeLeft(30 - (now.getSeconds() % 30));
@@ -36,101 +37,139 @@ export default function AppleStyleDynamic2FA({ params }: { params: Promise<{ sec
   }, [rawSecret]);
 
   const handleCopy = () => {
-    if (token !== '密钥错误' && token !== '加载中') {
-      navigator.clipboard.writeText(token.replace(/\s/g, ''));
-      setIsCopied(true);
-      if (window.navigator && window.navigator.vibrate) {
-        window.navigator.vibrate(50);
-      }
-      setTimeout(() => setIsCopied(false), 2000);
-    }
+    if (token === '密钥错误' || token === '加载中') return;
+
+    navigator.clipboard.writeText(token.replace(/\s/g, ''));
+    setIsCopied(true);
+    if (navigator.vibrate) navigator.vibrate(40);
+
+    setTimeout(() => setIsCopied(false), 2000);
   };
 
-  // 动态计算圆环参数
-  const radius = 120; // 半径
-  const circumference = 2 * Math.PI * radius; // 周长
-  const strokeDashoffset = circumference - ((timeLeft / 30) * circumference);
-  
-  // 颜色逻辑
-  const ringColor = timeLeft <= 5 ? 'text-red-500' : timeLeft <= 10 ? 'text-orange-400' : 'text-blue-500';
+  /**  
+   * 移动端优化点：  
+   * 让圆环尺寸随屏幕变化  
+   * - 小屏更紧凑  
+   * - 大屏保持大视觉  
+   */
+  const baseSize = typeof window !== 'undefined'
+    ? Math.min(window.innerWidth * 0.75, 340)
+    : 300;
+
+  const radius = baseSize / 2 - 18;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (timeLeft / 30) * circumference;
+
+  const ringColor =
+    timeLeft <= 5 ? 'text-red-500' :
+    timeLeft <= 10 ? 'text-orange-400' :
+    'text-blue-500';
+
   const bgColor = timeLeft <= 5 ? 'bg-red-50' : 'bg-white/80';
 
   if (!mounted) return null;
 
   return (
-    <div className="min-h-[100dvh] bg-[#F5F5F7] flex flex-col items-center justify-center p-4 relative overflow-hidden">
-      
-      {/* 返回按钮 */}
-      <Link 
-        href="/2fa" 
-        className="absolute top-6 left-6 md:top-8 md:left-8 flex items-center gap-1.5 px-4 py-2 bg-white/60 backdrop-blur-md border border-white/40 shadow-sm rounded-full text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-white transition-all duration-200 active:scale-95 z-20"
+    <div
+      className="min-h-[100dvh] bg-[#F5F5F7] flex flex-col items-center justify-center p-4 relative overflow-hidden"
+      style={{
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)'
+      }}
+    >
+      {/* 顶部返回按钮（适配刘海屏） */}
+      <Link
+        href="/2fa"
+        className="
+          absolute 
+          left-4
+          top-[calc(env(safe-area-inset-top)+0.75rem)]
+          flex items-center gap-1.5 px-4 py-2
+          bg-white/60 backdrop-blur-md
+          border border-white/40 shadow-sm 
+          rounded-full text-sm font-medium text-gray-600
+          hover:bg-white hover:text-gray-900
+          active:scale-95 
+          transition-all z-20
+        "
       >
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M15 18l-6-6 6-6"/>
+        <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <path d="M15 18l-6-6 6-6" />
         </svg>
         <span>主页</span>
       </Link>
 
-      {/* 巨大的圆环背景容器 */}
-      <div 
+      {/* --- 圆环主体 --- */}
+      <div
         onClick={handleCopy}
         className={`
-          relative w-[300px] h-[300px] md:w-[350px] md:h-[350px]
+          relative
           flex items-center justify-center
-          rounded-full
-          ${bgColor} backdrop-blur-2xl 
-          shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] 
-          cursor-pointer 
-          transition-all duration-300 
-          active:scale-95 
+          rounded-full cursor-pointer 
+          ${bgColor} 
+          shadow-[0_20px_60px_-15px_rgba(0,0,0,0.18)]
           touch-manipulation
+          active:scale-[0.97]
+          backdrop-blur-xl
+          transition-all duration-300
         `}
+        style={{
+          width: baseSize,
+          height: baseSize
+        }}
       >
-        {/* SVG 圆环倒计时 */}
-        <div className="absolute inset-0 pointer-events-none">
-          <svg className="w-full h-full transform -rotate-90">
-            {/* 底部灰色轨道 */}
-            <circle
-              cx="50%" cy="50%" r={radius}
-              fill="none" stroke="#E5E7EB" strokeWidth="12" strokeLinecap="round"
-            />
-            {/* 彩色进度条 */}
-            <circle
-              cx="50%" cy="50%" r={radius}
-              fill="none" 
-              stroke="currentColor" 
-              strokeWidth="12" 
-              strokeLinecap="round"
-              className={`${ringColor} transition-all duration-1000 ease-linear drop-shadow-lg`}
-              style={{ strokeDasharray: circumference, strokeDashoffset }}
-            />
-          </svg>
-        </div>
+        {/* SVG 环形计时器 */}
+        <svg
+          className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none"
+        >
+          <circle
+            cx="50%" cy="50%" r={radius}
+            fill="none" stroke="#E5E7EB"
+            strokeWidth="12" strokeLinecap="round"
+          />
+          <circle
+            cx="50%" cy="50%" r={radius}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="12"
+            strokeLinecap="round"
+            className={`${ringColor} transition-all duration-[900ms] ease-linear drop-shadow-lg`}
+            style={{ strokeDasharray: circumference, strokeDashoffset }}
+          />
+        </svg>
 
-        {/* 中间内容 */}
-        <div className="flex flex-col items-center z-10">
-          <h2 className="text-xs md:text-sm font-bold text-gray-400 uppercase tracking-widest mb-2">
+        {/* 中心内容 */}
+        <div className="flex flex-col items-center z-10 select-none">
+          <h2 className="text-xs font-bold text-gray-400 tracking-widest uppercase mb-2">
             安全验证码
           </h2>
-          
-          <div className={`text-5xl md:text-6xl font-bold font-mono tracking-wider select-none transition-colors duration-300 ${timeLeft <= 5 ? 'text-red-500 animate-pulse' : 'text-gray-900'}`}>
+
+          <div
+            className={`text-5xl font-bold font-mono tracking-widest ${
+              timeLeft <= 5 ? 'text-red-500 animate-pulse' : 'text-gray-900'
+            } transition-colors`}
+          >
             {token}
           </div>
 
-          {/* 倒计时秒数显示 */}
-          <div className={`mt-2 font-mono font-medium ${ringColor}`}>
+          <div className={`mt-1 font-mono font-medium ${ringColor}`}>
             {timeLeft}s
           </div>
 
-          <p className={`mt-4 text-xs font-medium transition-opacity duration-300 absolute -bottom-8 ${isCopied ? 'text-green-600 opacity-100' : 'opacity-0'}`}>
-            已复制到剪贴板
-          </p>
+          <div
+            className={`
+              mt-4 text-xs font-medium absolute -bottom-10 transition-all duration-300
+              ${isCopied ? 'opacity-100 text-green-600' : 'opacity-0'}
+            `}
+          >
+            已复制
+          </div>
         </div>
       </div>
 
-      {/* 底部密钥展示 */}
-      <div className="absolute bottom-8 left-0 w-full px-8 text-center opacity-40">
-        <p className="text-[10px] md:text-xs text-gray-500 font-mono truncate">
+      {/* 底部密钥展示（适配小屏，自适应截断） */}
+      <div className="absolute bottom-6 w-full text-center px-8 opacity-40">
+        <p className="text-[11px] font-mono text-gray-500 truncate">
           {decodeURIComponent(rawSecret || '')}
         </p>
       </div>
