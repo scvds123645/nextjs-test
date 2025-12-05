@@ -7,14 +7,13 @@ import {
   ArrowLeft,
   AppWindow,
   Facebook,
-  Hash,
   CopyMinus,
   Sparkles,
   ChevronRight,
   Database,
   ShieldCheck,
   UserCheck,
-  Dna, // [新增] 引入 DNA 图标用于猪猪鉴定
+  Dna,
 } from "lucide-react";
 
 // --- Types ---
@@ -37,25 +36,18 @@ const tools: ToolItem[] = [
     color: "from-blue-500 to-cyan-400",
   },
   {
-    path: "/text-deduplicator",
-    title: "文本去重",
-    desc: "高效移除重复内容，精简文本结构。",
-    icon: CopyMinus,
-    color: "from-rose-500 to-orange-400",
-  },
-  {
-    path: "/number-extractor",
-    title: "数值提取器",
-    desc: "从复杂非结构化文本中快速清洗提取数字。",
-    icon: Hash,
-    color: "from-violet-500 to-purple-400",
-  },
-  {
     path: "/2fa",
     title: "2FA 验证器",
     desc: "极简 TOTP 生成工具，支持密钥导入与快捷访问。",
     icon: ShieldCheck,
     color: "from-emerald-500 to-green-400",
+  },
+  {
+    path: "/unified-text-tools",
+    title: "文本处理套件",
+    desc: "一站式文本去重与14位号码提取工具。",
+    icon: CopyMinus,
+    color: "from-rose-500 to-orange-400",
   },
   {
     path: "/facebook-cookie-injector",
@@ -79,18 +71,16 @@ const tools: ToolItem[] = [
     icon: UserCheck,
     color: "from-sky-500 to-indigo-500",
   },
-  // --- [新增] 猪猪鉴定器 ---
   {
     path: "/pig",
     title: "猪猪鉴定器",
     desc: "长按屏幕汲取猪元素，测测你的含猪量。",
     icon: Dna,
-    color: "from-pink-500 to-rose-400", // 粉色系，契合主题
+    color: "from-pink-500 to-rose-400",
   },
 ];
 
 // --- Utilities ---
-
 /**
  * 触发轻微的触觉反馈
  */
@@ -112,7 +102,6 @@ export default function ToolsPage() {
         {/* 背景装饰 */}
         <div className="fixed top-[-20%] left-[-20%] w-[80%] h-[50%] bg-purple-900/20 blur-[100px] rounded-full pointer-events-none" />
         <div className="fixed bottom-[-10%] right-[-10%] w-[60%] h-[40%] bg-blue-900/10 blur-[80px] rounded-full pointer-events-none" />
-
         {/* 顶部导航栏 */}
         <header className="sticky top-0 z-50 px-6 py-4 flex items-center justify-between bg-[#050505]/60 backdrop-blur-xl border-b border-white/5">
           <motion.div
@@ -135,7 +124,6 @@ export default function ToolsPage() {
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
           </div>
         </header>
-
         {/* 主要内容区域 */}
         <div className="px-4 py-6 z-10">
           
@@ -154,7 +142,6 @@ export default function ToolsPage() {
               数据处理中心
             </p>
           </motion.div>
-
           {/* Bento Grid 布局 */}
           <div className="grid grid-cols-2 gap-3 auto-rows-auto">
             <AnimatePresence>
@@ -163,7 +150,6 @@ export default function ToolsPage() {
               ))}
             </AnimatePresence>
           </div>
-
           {/* 底部装饰文案 */}
           <motion.div 
             initial={{ opacity: 0 }}
@@ -185,14 +171,12 @@ export default function ToolsPage() {
 function ToolCard({ tool, index }: { tool: ToolItem; index: number }) {
   // 判断是否为外部链接
   const isExternal = tool.path.startsWith("http");
-
   return (
     <MotionLink
       href={tool.path}
-      target={isExternal ? "_blank" : undefined} // 外部链接新标签页打开
-      rel={isExternal ? "noopener noreferrer" : undefined} // 安全属性
+      target={isExternal ? "_blank" : undefined}
+      rel={isExternal ? "noopener noreferrer" : undefined}
       className={`relative ${tool.span || "col-span-1"} rounded-2xl overflow-hidden`}
-      // 1. Physics-Based Animations
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ 
@@ -201,7 +185,6 @@ function ToolCard({ tool, index }: { tool: ToolItem; index: number }) {
         damping: 20,
         delay: index * 0.05
       }}
-      // 2. Interaction State
       whileHover={{ 
         y: -4, 
         transition: { type: "spring", stiffness: 300, damping: 15 } 
@@ -210,7 +193,6 @@ function ToolCard({ tool, index }: { tool: ToolItem; index: number }) {
         scale: 0.95,
         transition: { type: "spring", stiffness: 400, damping: 17 }
       }}
-      // 3. Haptic Feedback Trigger
       onTapStart={triggerHaptic}
     >
       <motion.div
@@ -223,7 +205,6 @@ function ToolCard({ tool, index }: { tool: ToolItem; index: number }) {
       >
         {/* 悬停微光 */}
         <div className={`absolute -right-12 -top-12 w-24 h-24 bg-gradient-to-br ${tool.color} blur-[50px] opacity-0 hover:opacity-20 transition-opacity duration-500 pointer-events-none`} />
-
         <div className="flex flex-col h-full justify-between gap-3 relative z-10">
           {/* 图标区 */}
           <div className="flex justify-between items-start">
@@ -232,10 +213,8 @@ function ToolCard({ tool, index }: { tool: ToolItem; index: number }) {
             >
               <tool.icon className="w-5 h-5" strokeWidth={2.5} />
             </div>
-
             <ChevronRight className="w-4 h-4 text-zinc-700 transition-colors" />
           </div>
-
           {/* 文本内容区 */}
           <div>
             <h3 className="text-base font-bold text-zinc-100 tracking-tight mb-1">
