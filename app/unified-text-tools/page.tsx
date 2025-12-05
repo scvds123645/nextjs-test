@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { ArrowLeft, Trash2, Copy, CheckCircle2, Sparkles, FileText, Search, RotateCcw } from 'lucide-react';
 
 // ==================== 类型定义 ====================
@@ -12,40 +12,67 @@ interface Stats {
   removed: number;
 }
 
+// ==================== 通用 Hooks ====================
+
+// --- iOS 键盘适配（防止底部按钮被遮挡） ---
+function useKeyboardSafeArea() {
+  useEffect(() => {
+    const handler = () => {
+      if (window.visualViewport) {
+        const offset = window.innerHeight - window.visualViewport.height;
+        document.body.style.paddingBottom = offset > 0 ? `${offset}px` : '0px';
+      }
+    };
+
+    window.visualViewport?.addEventListener('resize', handler);
+    return () => window.visualViewport?.removeEventListener('resize', handler);
+  }, []);
+}
+
+// --- 输入框 focus 时自动滚动到视图中心（避免被键盘挡住） ---
+function useAutoScrollInput() {
+  useEffect(() => {
+    const handler = (e: FocusEvent) => {
+      setTimeout(() => {
+        (e.target as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 300);
+    };
+
+    const textareas = document.querySelectorAll('textarea');
+    textareas.forEach(t => t.addEventListener('focus', handler));
+
+    return () => textareas.forEach(t => t.removeEventListener('focus', handler));
+  }, []);
+}
+
 // ==================== 可复用组件 ====================
 
-// 1. 分段控制器组件 - 优化触摸体验
+// --- 工具切换器 ---
 const SegmentedControl: React.FC<{
   value: ToolType;
   onChange: (value: ToolType) => void;
-}> = ({ value, onChange }) => {
-  return (
-    <div className="bg-gray-200/50 p-1 rounded-2xl flex gap-1 touch-manipulation">
+}> = ({ value, onChange }) => (
+  <div className="bg-gray-200/50 p-1 rounded-2xl flex gap-1 touch-manipulation">
+    {[
+      { key: 'deduplicate', text: '文本去重' },
+      { key: 'extract', text: '号码提取' }
+    ].map(item => (
       <button
-        onClick={() => onChange('deduplicate')}
+        key={item.key}
+        onClick={() => onChange(item.key as ToolType)}
         className={`flex-1 px-4 py-3 rounded-xl font-semibold text-base transition-all duration-200 active:scale-95 ${
-          value === 'deduplicate'
+          value === item.key
             ? 'bg-white text-gray-900 shadow-sm'
             : 'bg-transparent text-gray-500'
         }`}
       >
-        文本去重
+        {item.text}
       </button>
-      <button
-        onClick={() => onChange('extract')}
-        className={`flex-1 px-4 py-3 rounded-xl font-semibold text-base transition-all duration-200 active:scale-95 ${
-          value === 'extract'
-            ? 'bg-white text-gray-900 shadow-sm'
-            : 'bg-transparent text-gray-500'
-        }`}
-      >
-        号码提取
-      </button>
-    </div>
-  );
-};
+    ))}
+  </div>
+);
 
-// 2. 输入框组件 - 优化移动端输入体验
+// --- 输入框组件 ---
 const TextInput: React.FC<{
   value: string;
   onChange: (value: string) => void;
@@ -53,43 +80,42 @@ const TextInput: React.FC<{
   placeholder: string;
   label: string;
   lineCount?: number;
-}> = ({ value, onChange, onClear, placeholder, label, lineCount }) => {
-  return (
-    <section className="flex flex-col gap-2">
-      <div className="flex justify-between items-end px-1">
-        <label className="text-sm font-semibold text-gray-600 flex items-center gap-2">
-          <FileText className="w-4 h-4" /> {label}
-        </label>
-        {lineCount !== undefined && (
-          <span className="text-xs text-gray-400">
-            {lineCount} 行
-          </span>
-        )}
-      </div>
-      
-      <div className="relative">
-        <textarea
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          className="w-full h-40 p-4 rounded-2xl border border-gray-200 bg-white text-base leading-relaxed outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent resize-none shadow-sm placeholder:text-gray-300 transition-colors touch-manipulation"
-          style={{ fontSize: '16px' }} // 防止 iOS Safari 自动缩放
-        />
-        {value && (
-          <button 
-            onClick={onClear}
-            className="absolute top-2 right-2 p-2 bg-gray-100 text-gray-500 rounded-lg hover:bg-gray-200 active:bg-gray-300 transition-colors touch-manipulation"
-            aria-label="清空输入"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        )}
-      </div>
-    </section>
-  );
-};
+}> = ({ value, onChange, onClear, placeholder, label, lineCount }) => (
+  <section className="flex flex-col gap-2">
+    <div className="flex justify-between items-end px-1">
+      <label className="text-sm font-semibold text-gray-600 flex items-center gap-2">
+        <FileText className="w-4 h-4" /> {label}
+      </label>
+      {lineCount !== undefined && (
+        <span className="text-xs text-gray-400">{lineCount} 行</span>
+      )}
+    </div>
 
-// 3. 统计卡片组件
+    <div className="relative">
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        inputMode="text"
+        autoCorrect="off"
+        autoCapitalize="none"
+        spellCheck={false}
+        className="w-full h-40 p-4 rounded-2xl border border-gray-200 bg-white text-base leading-relaxed outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent resize-none shadow-sm transition-colors touch-manipulation"
+        style={{ fontSize: '16px' }}
+      />
+      {value && (
+        <button
+          onClick={onClear}
+          className="absolute top-2 right-2 p-2 bg-gray-100 text-gray-500 rounded-lg hover:bg-gray-200 active:bg-gray-300 transition-colors touch-manipulation"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      )}
+    </div>
+  </section>
+);
+
+// --- 统计卡片 ---
 const StatsCard: React.FC<{
   label: string;
   value: number;
@@ -100,13 +126,11 @@ const StatsCard: React.FC<{
     danger: 'bg-red-50 border-red-100 text-red-600',
     success: 'bg-green-50 border-green-100 text-green-600',
   };
-  
   const labelStyles = {
     default: 'text-gray-400',
     danger: 'text-red-400',
     success: 'text-green-500',
   };
-
   return (
     <div className={`${styles[variant]} p-3 rounded-xl border shadow-sm text-center`}>
       <div className={`text-xs ${labelStyles[variant]} mb-1`}>{label}</div>
@@ -115,37 +139,26 @@ const StatsCard: React.FC<{
   );
 };
 
-// 4. 复制按钮组件 - 增大触摸区域
+// --- 复制按钮 ---
 const CopyButton: React.FC<{
   isCopied: boolean;
   onClick: () => void;
   disabled?: boolean;
-}> = ({ isCopied, onClick, disabled }) => {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`min-h-[44px] px-4 flex items-center gap-2 rounded-lg shadow-sm text-xs font-bold transition-all active:scale-95 touch-manipulation ${
-        isCopied 
-          ? 'bg-green-500 text-white border-transparent shadow-green-200' 
-          : 'bg-white text-gray-700 border border-gray-200 active:bg-gray-100'
-      }`}
-      aria-label={isCopied ? '已复制' : '复制到剪贴板'}
-    >
-      {isCopied ? (
-        <>
-          <CheckCircle2 className="w-4 h-4" /> 已复制
-        </>
-      ) : (
-        <>
-          <Copy className="w-4 h-4" /> 复制
-        </>
-      )}
-    </button>
-  );
-};
+}> = ({ isCopied, onClick, disabled }) => (
+  <button
+    onClick={onClick}
+    disabled={disabled}
+    className={`min-h-[44px] px-4 flex items-center gap-2 rounded-lg shadow-sm text-xs font-bold transition-all duration-200 active:scale-95 touch-manipulation ${
+      isCopied 
+        ? 'bg-green-500 text-white shadow-green-200'
+        : 'bg-white text-gray-700 border border-gray-200 active:bg-gray-100'
+    }`}
+  >
+    {isCopied ? <><CheckCircle2 className="w-4 h-4" /> 已复制</> : <><Copy className="w-4 h-4" /> 复制</>}
+  </button>
+);
 
-// 5. 操作按钮组件 - 优化触摸反馈
+// --- 操作按钮 ---
 const ActionButton: React.FC<{
   onClick: () => void;
   disabled?: boolean;
@@ -153,15 +166,16 @@ const ActionButton: React.FC<{
   text: string;
   variant?: 'primary' | 'secondary';
 }> = ({ onClick, disabled, icon, text, variant = 'primary' }) => {
-  const styles = variant === 'primary'
-    ? 'bg-blue-500 text-white shadow-md shadow-blue-200/50 active:bg-blue-600'
-    : 'bg-white border border-gray-300 text-gray-700 active:bg-gray-100 shadow-sm';
+  const styles =
+    variant === 'primary'
+      ? 'bg-blue-500 text-white shadow-md shadow-blue-200/50 active:bg-blue-600'
+      : 'bg-white border border-gray-300 text-gray-700 active:bg-gray-100 shadow-sm';
 
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`w-full min-h-[48px] flex items-center justify-center gap-2 rounded-2xl font-semibold text-base transition-all active:scale-[0.97] disabled:opacity-50 disabled:shadow-none disabled:active:scale-100 touch-manipulation ${styles}`}
+      className={`w-full min-h-[48px] flex items-center justify-center gap-2 rounded-2xl font-semibold text-base transition-all active:scale-[0.97] touch-manipulation ${styles}`}
     >
       {icon}
       {text}
@@ -171,61 +185,44 @@ const ActionButton: React.FC<{
 
 // ==================== 主组件 ====================
 export default function UnifiedTextToolsPage() {
+  useKeyboardSafeArea();
+  useAutoScrollInput();
+
   // 工具切换
   const [activeTool, setActiveTool] = useState<ToolType>('deduplicate');
-  
-  // 去重工具状态
+
+  // ---- 去重工具状态 ----
   const [dedupeInput, setDedupeInput] = useState('');
   const [dedupeOutput, setDedupeOutput] = useState('');
   const [dedupeStats, setDedupeStats] = useState<Stats>({ original: 0, unique: 0, removed: 0 });
   const [dedupeProcessed, setDedupeProcessed] = useState(false);
   const [dedupeCopied, setDedupeCopied] = useState(false);
-  
-  // 提取工具状态
-  const [extractInput, setExtractInput] = useState('');
-  const [extractResults, setExtractResults] = useState<string[]>([]);
-  const [extractSearched, setExtractSearched] = useState(false);
-  const [extractCopied, setExtractCopied] = useState(false);
-  
   const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 防止页面滚动穿透（iOS Safari）
-  useEffect(() => {
-    document.body.style.overflow = 'auto';
-    document.body.style.position = 'relative';
-    
-    return () => {
-      document.body.style.overflow = '';
-      document.body.style.position = '';
-    };
-  }, []);
+  // 用 useMemo 优化去重
+  const processedLines = useMemo(() => {
+    const lines = dedupeInput.split('\n').map(l => l.trim()).filter(Boolean);
+    const unique = Array.from(new Set(lines));
+    return { lines, unique };
+  }, [dedupeInput]);
 
-  // ==================== 去重工具逻辑 ====================
+  // 去重
   const handleDeduplicate = useCallback(() => {
     if (!dedupeInput.trim()) return;
 
-    const lines = dedupeInput.split('\n');
-    const processedLines = lines
-      .map(line => line.trim())
-      .filter(line => line !== '');
-
-    const uniqueSet = new Set(processedLines);
-    const uniqueLines = Array.from(uniqueSet);
-
-    setDedupeOutput(uniqueLines.join('\n'));
+    setDedupeOutput(processedLines.unique.join('\n'));
     setDedupeStats({
-      original: lines.length,
-      unique: uniqueLines.length,
-      removed: lines.length - uniqueLines.length
+      original: processedLines.lines.length,
+      unique: processedLines.unique.length,
+      removed: processedLines.lines.length - processedLines.unique.length,
     });
     setDedupeProcessed(true);
     setDedupeCopied(false);
-    
-    // 处理完成后滚动到结果区域
-    setTimeout(() => {
+
+    requestAnimationFrame(() => {
       window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-    }, 100);
-  }, [dedupeInput]);
+    });
+  }, [dedupeInput, processedLines]);
 
   const handleDedupeClear = () => {
     setDedupeInput('');
@@ -241,13 +238,18 @@ export default function UnifiedTextToolsPage() {
       await navigator.clipboard.writeText(dedupeOutput);
       setDedupeCopied(true);
       if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
-      copyTimeoutRef.current = setTimeout(() => setDedupeCopied(false), 2000);
+      copyTimeoutRef.current = setTimeout(() => setDedupeCopied(false), 1500);
     } catch (err) {
       console.error('复制失败: ', err);
     }
   };
 
-  // ==================== 提取工具逻辑 ====================
+  // ---- 提取工具 ----
+  const [extractInput, setExtractInput] = useState('');
+  const [extractResults, setExtractResults] = useState<string[]>([]);
+  const [extractSearched, setExtractSearched] = useState(false);
+  const [extractCopied, setExtractCopied] = useState(false);
+
   const handleExtract = () => {
     if (!extractInput.trim()) {
       setExtractResults([]);
@@ -257,16 +259,15 @@ export default function UnifiedTextToolsPage() {
 
     const regex = /(?<!\d)\d{14}(?!\d)/g;
     const matches = extractInput.match(regex) || [];
-    const uniqueResults = Array.from(new Set(matches));
-    
-    setExtractResults(uniqueResults);
+    const unique = Array.from(new Set(matches));
+
+    setExtractResults(unique);
     setExtractSearched(true);
     setExtractCopied(false);
-    
-    // 处理完成后滚动到结果区域
-    setTimeout(() => {
+
+    requestAnimationFrame(() => {
       window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-    }, 100);
+    });
   };
 
   const handleExtractClear = () => {
@@ -277,34 +278,29 @@ export default function UnifiedTextToolsPage() {
   };
 
   const handleExtractCopy = async () => {
-    if (extractResults.length === 0) return;
     try {
-      const textToCopy = extractResults.join('\n');
-      await navigator.clipboard.writeText(textToCopy);
+      await navigator.clipboard.writeText(extractResults.join('\n'));
       setExtractCopied(true);
-      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
-      copyTimeoutRef.current = setTimeout(() => setExtractCopied(false), 2000);
+      setTimeout(() => setExtractCopied(false), 1500);
     } catch (err) {
-      console.error('复制失败:', err);
+      console.error(err);
     }
   };
 
-  // ==================== 工具切换处理 ====================
+  // 工具切换
   const handleToolChange = (tool: ToolType) => {
     setActiveTool(tool);
-    // 切换时滚动到顶部
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
     <div className="min-h-screen bg-gray-50/30 flex flex-col font-sans text-gray-900 pb-20 safe-area-inset">
-      
-      {/* 顶部导航栏 - 增加安全区域支持 */}
-      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200 px-4 h-14 flex items-center justify-between shadow-sm safe-area-top">
+
+      {/* 顶部栏 */}
+      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200 px-4 h-14 flex items-center justify-between shadow-sm">
         <button 
           onClick={() => window.history.back()}
           className="p-2 -ml-2 rounded-full active:bg-gray-200 transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
-          aria-label="返回"
         >
           <ArrowLeft className="w-5 h-5 text-gray-700" />
         </button>
@@ -314,20 +310,20 @@ export default function UnifiedTextToolsPage() {
         <div className="w-11" />
       </header>
 
-      {/* 主内容区 - 优化移动端间距 */}
+      {/* 内容 */}
       <main className="flex-1 px-4 py-4 flex flex-col gap-4 max-w-2xl mx-auto w-full">
-        
-        {/* 工具切换器 */}
+
         <SegmentedControl value={activeTool} onChange={handleToolChange} />
 
-        {/* 去重工具 */}
+        {/* =========== 文本去重 =========== */}
         {activeTool === 'deduplicate' && (
           <div className="animate-in fade-in slide-in-from-right-2 duration-300">
+
             <TextInput
               value={dedupeInput}
               onChange={setDedupeInput}
               onClear={handleDedupeClear}
-              placeholder="请粘贴需要去重的列表...&#10;自动去除首尾空格及空行"
+              placeholder="请粘贴需要去重的列表..."
               label="原始文本"
               lineCount={dedupeInput ? dedupeInput.split('\n').length : 0}
             />
@@ -335,14 +331,15 @@ export default function UnifiedTextToolsPage() {
             <div className="mt-4">
               <ActionButton
                 onClick={handleDeduplicate}
-                disabled={!dedupeInput}
+                disabled={!dedupeInput.trim()}
                 icon={<Sparkles className="w-5 h-5" />}
                 text="开始去重"
               />
             </div>
 
             {dedupeProcessed && (
-              <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 space-y-4 mt-4">
+              <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 space-y-4 mt-4 pb-6">
+
                 <div className="grid grid-cols-3 gap-2">
                   <StatsCard label="原行数" value={dedupeStats.original} />
                   <StatsCard label="已移除" value={dedupeStats.removed} variant="danger" />
@@ -353,17 +350,16 @@ export default function UnifiedTextToolsPage() {
                   <label className="text-sm font-semibold text-gray-600 px-1">
                     去重结果
                   </label>
-                  
-                  <div className="relative group">
+
+                  <div className="relative">
                     <textarea
                       readOnly
                       value={dedupeOutput}
-                      placeholder="结果将显示在这里..."
-                      className="w-full h-48 p-4 rounded-2xl border border-gray-200 bg-gray-50 text-base leading-relaxed outline-none resize-none text-gray-800 transition-colors touch-manipulation"
+                      className="w-full h-48 p-4 rounded-2xl border border-gray-200 bg-gray-50 text-base leading-relaxed outline-none resize-none text-gray-800 touch-manipulation"
                       style={{ fontSize: '16px' }}
                       onClick={(e) => (e.target as HTMLTextAreaElement).select()}
                     />
-                    
+
                     <div className="absolute bottom-3 right-3">
                       <CopyButton
                         isCopied={dedupeCopied}
@@ -378,14 +374,16 @@ export default function UnifiedTextToolsPage() {
           </div>
         )}
 
-        {/* 提取工具 */}
+
+        {/* =========== 号码提取 =========== */}
         {activeTool === 'extract' && (
           <div className="animate-in fade-in slide-in-from-left-2 duration-300">
+
             <TextInput
               value={extractInput}
               onChange={setExtractInput}
               onClear={handleExtractClear}
-              placeholder="请粘贴包含14位数字的多行文本...&#10;例如：&#10;订单号：20231012123456 已发货&#10;ID: 20231012987654"
+              placeholder="请粘贴包含14位数字的文本..."
               label="原始文本"
               lineCount={extractInput ? extractInput.split('\n').length : 0}
             />
@@ -405,10 +403,11 @@ export default function UnifiedTextToolsPage() {
             </div>
 
             {extractSearched && (
-              <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 mt-4">
+              <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 mt-4 pb-6">
+
                 <div className="flex items-center justify-between mb-2 px-1">
                   <h2 className="text-sm font-semibold text-gray-600">
-                    提取结果 (共 {extractResults.length} 个)
+                    提取结果（共 {extractResults.length} 个）
                   </h2>
                   {extractResults.length > 0 && (
                     <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
@@ -422,8 +421,8 @@ export default function UnifiedTextToolsPage() {
                     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden max-h-[50vh] overflow-y-auto overscroll-contain -webkit-overflow-scrolling-touch">
                       <ul className="divide-y divide-gray-100">
                         {extractResults.map((num, index) => (
-                          <li 
-                            key={`${num}-${index}`} 
+                          <li
+                            key={`${num}-${index}`}
                             className="flex items-center p-3 active:bg-gray-50 transition-colors touch-manipulation min-h-[52px]"
                           >
                             <span className="font-mono text-gray-800 tracking-wider text-base select-all">
@@ -440,9 +439,9 @@ export default function UnifiedTextToolsPage() {
                     <button
                       onClick={handleExtractCopy}
                       disabled={extractCopied}
-                      className={`w-full min-h-[52px] flex items-center justify-center gap-2 rounded-2xl font-bold text-base shadow-md transition-all active:scale-[0.97] touch-manipulation ${
+                      className={`w-full min-h-[52px] flex items-center justify-center gap-2 rounded-2xl font-bold text-base shadow-md transition-all duration-200 active:scale-[0.97] touch-manipulation ${
                         extractCopied 
-                          ? "bg-green-500 text-white" 
+                          ? "bg-green-500 text-white"
                           : "bg-gray-900 text-white active:bg-gray-800"
                       }`}
                     >
@@ -467,8 +466,10 @@ export default function UnifiedTextToolsPage() {
                 )}
               </div>
             )}
+
           </div>
         )}
+
       </main>
     </div>
   );
