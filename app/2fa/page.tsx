@@ -34,6 +34,7 @@ export default function AppleStyle2FA() {
         setIsValid(false);
       }
     }, 1000);
+
     return () => clearInterval(timer);
   }, [secret]);
 
@@ -48,7 +49,10 @@ export default function AppleStyle2FA() {
   const handleCopyLink = () => {
     if (!isValid) return;
     const cleanSecret = secret.replace(/\s/g, '');
-    const url = `${window.location.origin}/2fa/2fa/${cleanSecret}`;
+    // --- 修正点 ---
+    // 修正了 URL 路径，之前是 /2fa/2fa/，现在是 /2fa/
+    // 同时使用 encodeURIComponent 来确保密钥中的特殊字符被正确编码
+    const url = `${window.location.origin}/2fa/${encodeURIComponent(cleanSecret)}`;
     navigator.clipboard.writeText(url);
     setIsLinkCopied(true);
     if (navigator.vibrate) navigator.vibrate(40);
@@ -81,18 +85,16 @@ export default function AppleStyle2FA() {
         href="/tools"
         className="absolute top-[calc(env(safe-area-inset-top)+0.5rem)] left-4 flex items-center gap-1.5 px-3 py-2 bg-white/60 backdrop-blur-md border border-white/40 shadow-sm rounded-full text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-white transition active:scale-95 z-20"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" stroke="currentColor" fill="none" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M15 18l-6-6 6-6" />
         </svg>
         <span>工具箱</span>
       </Link>
-
       {/* 主卡片 */}
       <div className="w-full max-w-md bg-white/80 backdrop-blur-xl border border-white/40 shadow-xl rounded-2xl p-5 md:p-8 transition-all duration-300">
         <div className="text-center mb-6">
           <h1 className="text-xl md:text-2xl font-semibold text-gray-900">两步验证</h1>
         </div>
-
         {/* 验证码卡 */}
         <div
           onClick={handleCopyToken}
@@ -101,7 +103,6 @@ export default function AppleStyle2FA() {
           {isValid && (
             <div className={`absolute top-3 right-4 font-mono text-sm font-bold ${getTextColor()}`}>{timeLeft}s</div>
           )}
-
           <div
             className={`text-4xl md:text-5xl font-bold tracking-widest font-mono z-10 transition-colors ${
               timeLeft <= 5 && isValid ? 'text-red-500 animate-pulse' : 'text-gray-900'
@@ -109,7 +110,6 @@ export default function AppleStyle2FA() {
           >
             {token}
           </div>
-
           <div
             className={`mt-3 text-xs font-medium z-10 transition-colors ${
               isTokenCopied ? 'text-green-500 scale-105' : 'text-gray-400 group-hover:text-blue-500'
@@ -117,7 +117,6 @@ export default function AppleStyle2FA() {
           >
             {isTokenCopied ? '已复制 ✓' : '点击复制'}
           </div>
-
           {isValid && (
             <div className="absolute bottom-0 left-0 w-full h-1.5 bg-gray-100">
               <div
@@ -127,7 +126,6 @@ export default function AppleStyle2FA() {
             </div>
           )}
         </div>
-
         {/* 输入框 */}
         <div className="space-y-2">
           <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider ml-1">
@@ -145,7 +143,6 @@ export default function AppleStyle2FA() {
             className="w-full bg-gray-100/80 border-0 rounded-xl px-4 py-3 text-base text-gray-800 placeholder-gray-400 focus:ring-2 focus:ring-blue-500/50 focus:bg-white transition-all outline-none font-medium"
           />
         </div>
-
         {/* 链接按钮 */}
         <div
           className={`overflow-hidden transition-all duration-500 ease-in-out ${
@@ -163,9 +160,8 @@ export default function AppleStyle2FA() {
             {isLinkCopied ? '链接已复制' : '复制快捷访问链接'}
           </button>
         </div>
-
         <div className="mt-6 text-center">
-          <p className="text-[10px] text-gray-400">本地生成 · 安全加密</p>
+          <p className="text-[10px] text-gray-400">本地生成 · 安全可靠</p>
         </div>
       </div>
     </div>
