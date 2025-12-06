@@ -1,9 +1,10 @@
 'use client';
-import React, { useState, useEffect, use, useRef, memo } from 'react';
+
+import React, { useState, useEffect, use, useMemo } from 'react';
 import { authenticator } from 'otplib';
 import Link from 'next/link';
 
-// 辅助函数：安全地生成 Token
+// 辅助函数：安全地生成 Token，既能在服务端也能在客户端运行
 const generateToken = (secret: string | undefined) => {
   if (!secret) return '------';
   try {
@@ -16,163 +17,143 @@ const generateToken = (secret: string | undefined) => {
 };
 
 // 辅助函数：获取剩余时间
-const getTimeLeft = () => 30 - (new Date().getSeconds() % 30);
-
-// 优化 1: 将 SVG 圆环提取为独立的 memo 组件，避免不必要的重渲染
-const TimeRing = memo(({ timeLeft }: { timeLeft: number }) => {
-  const viewBoxSize = 340;
-  const strokeWidth = 12;
-  const radius = (viewBoxSize - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (timeLeft / 30) * circumference;
-  
-  const ringColor = timeLeft <= 5 ? '#ef4444' : timeLeft <= 10 ? '#fb923c' : '#3b82f6';
-
-  return (
-    <svg className="absolute inset-0 -rotate-90" viewBox={`0 0 ${viewBoxSize} ${viewBoxSize}`}>
-      <circle
-        cx={viewBoxSize / 2}
-        cy={viewBoxSize / 2}
-        r={radius}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={strokeWidth}
-        className="text-gray-200"
-      />
-      <circle
-        cx={viewBoxSize / 2}
-        cy={viewBoxSize / 2}
-        r={radius}
-        fill="none"
-        stroke={ringColor}
-        strokeWidth={strokeWidth}
-        strokeDasharray={circumference}
-        strokeDashoffset={strokeDashoffset}
-        strokeLinecap="round"
-        style={{ transition: 'stroke-dashoffset 1s linear' }}
-      />
-    </svg>
-  );
-});
-
-TimeRing.displayName = 'TimeRing';
+const getTimeLeft = () => {
+  return 30 - (new Date().getSeconds() % 30);
+};
 
 export default function AppleStyleDynamic2FA({ params }: { params: Promise<{ key: string }> }) {
+  // 1. 解包 Params
   const resolvedParams = use(params);
   const rawKey = resolvedParams.key;
 
-  // 优化 2: 使用 useRef 存储计时器 ID，避免闭包问题
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  
-  // 优化 3: 初始化时直接计算，避免额外的渲染
+  // 2. 同步初始化 State
+  // 我们直接在初始化时计算 token，这样服务器渲染出的 HTML 里就已经包含了验证码
+  // 不再需要 "加载中" 状态
   const [token, setToken] = useState(() => generateToken(rawKey));
   const [timeLeft, setTimeLeft] = useState(() => getTimeLeft());
   const [isCopied, setIsCopied] = useState(false);
 
-  // 优化 4: 使用 useRef 来避免复制提示的计时器泄漏
-  const copyTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-  // 优化 5: 优化计时器逻辑 - 只在必要时更新状态
+  // 3. 计时器逻辑
   useEffect(() => {
-    // 立即校准
-    const currentTimeLeft = getTimeLeft();
-    setTimeLeft(currentTimeLeft);
+    // 修正：为了防止 hydration mismatch，我们可以在 mount 后立即校准一次时间
+    setTimeLeft(getTimeLeft());
     setToken(generateToken(rawKey));
 
-    // 优化 6: 使用单一计时器，精确控制更新时机
-    const updateState = () => {
+    const timer = setInterval(() => {
       const newTimeLeft = getTimeLeft();
+      setTimeLeft(newTimeLeft);
       
-      // 只在时间真正改变时更新状态
-      setTimeLeft(prev => {
-        if (prev !== newTimeLeft) {
-          // 当倒计时重置时更新 Token
-          if (newTimeLeft === 30 || newTimeLeft === 29) {
-            setToken(generateToken(rawKey));
-          }
-          return newTimeLeft;
-        }
-        return prev;
-      });
-    };
-
-    timerRef.current = setInterval(updateState, 1000);
-
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
+      // 当倒计时重置时（或者每秒检查），更新 Token
+      // 实际上每秒检查开销很小，这样能保证 Token 绝对实时
+      if (newTimeLeft === 30 || newTimeLeft === 29) {
+         setToken(generateToken(rawKey));
       }
-    };
+    }, 1000);
+
+    return () => clearInterval(timer);
   }, [rawKey]);
 
-  // 优化 7: 优化复制逻辑
   const handleCopy = () => {
     if (token === '密钥错误' || token.includes('-')) return;
-    
     navigator.clipboard.writeText(token.replace(/\s/g, ''));
     setIsCopied(true);
-    
     if (navigator.vibrate) navigator.vibrate(40);
-    
-    // 清除之前的计时器
-    if (copyTimerRef.current) {
-      clearTimeout(copyTimerRef.current);
-    }
-    
-    copyTimerRef.current = setTimeout(() => setIsCopied(false), 2000);
+    setTimeout(() => setIsCopied(false), 2000);
   };
 
-  // 清理复制计时器
-  useEffect(() => {
-    return () => {
-      if (copyTimerRef.current) {
-        clearTimeout(copyTimerRef.current);
-      }
-    };
-  }, []);
+  // 4. 样式逻辑优化：不再依赖 window.innerWidth
+  // 使用 SVG viewBox 实现自适应缩放
+  const viewBoxSize = 340;
+  const strokeWidth = 12;
+  const radius = (viewBoxSize - strokeWidth) / 2; // 留出描边宽度
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (timeLeft / 30) * circumference;
 
-  // 优化 8: 使用 useMemo 缓存样式类名
+  const ringColor =
+    timeLeft <= 5 ? 'text-red-500' :
+    timeLeft <= 10 ? 'text-orange-400' :
+    'text-blue-500';
+  
   const bgColor = timeLeft <= 5 ? 'bg-red-50' : 'bg-white/80';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 flex flex-col items-center justify-center p-4 font-sans">
-      <Link 
-        href="/" 
-        className="absolute top-6 left-6 text-blue-600 hover:text-blue-700 transition-colors text-sm font-medium"
+    <div
+      className="min-h-[100dvh] bg-[#F5F5F7] flex flex-col items-center justify-center p-4 relative overflow-hidden"
+      style={{
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)'
+      }}
+    >
+      <Link
+        href="/2fa"
+        className="absolute left-4 top-[calc(env(safe-area-inset-top)+0.75rem)] flex items-center gap-1.5 px-4 py-2 bg-white/60 backdrop-blur-md border border-white/40 shadow-sm rounded-full text-sm font-medium text-gray-600 hover:bg-white hover:text-gray-900 active:scale-95 transition-all z-20"
       >
-        ← 主页
+        <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24">
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
+        <span>主页</span>
       </Link>
-
-      <div className={`relative ${bgColor} backdrop-blur-xl rounded-3xl shadow-2xl p-8 transition-colors duration-300 w-[min(75vw,340px)] aspect-square flex flex-col items-center justify-center`}>
-        <TimeRing timeLeft={timeLeft} />
-
-        <div className="relative z-10 text-center space-y-4">
-          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+      
+      {/* 
+         优化点：使用 CSS 变量或 Tailwind 处理响应式宽度 
+         w-[min(75vw,340px)] 替代了 JS 中的 Math.min
+      */}
+      <div
+        onClick={handleCopy}
+        className={`relative flex items-center justify-center rounded-full cursor-pointer ${bgColor} shadow-[0_20px_60px_-15px_rgba(0,0,0,0.18)] touch-manipulation active:scale-[0.97] backdrop-blur-xl transition-all duration-300 aspect-square w-[min(75vw,340px)]`}
+      >
+        {/* 
+           优化点：SVG 使用 viewBox，内容会自动缩放，无需 JS 计算半径 
+        */}
+        <svg 
+          className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none"
+          viewBox={`0 0 ${viewBoxSize} ${viewBoxSize}`}
+        >
+          <circle
+            cx="50%" cy="50%" r={radius}
+            fill="none" stroke="#E5E7EB"
+            strokeWidth={strokeWidth}
+          />
+          <circle
+            cx="50%" cy="50%" r={radius}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            className={`${ringColor} transition-all duration-[900ms] ease-linear drop-shadow-lg`}
+            style={{ strokeDasharray: circumference, strokeDashoffset }}
+            // 优化点：忽略服务端和客户端时间微小差异导致的属性不匹配警告
+            suppressHydrationWarning
+          />
+        </svg>
+        
+        <div className="flex flex-col items-center z-10 select-none">
+          <h2 className="text-xs font-bold text-gray-400 tracking-widest uppercase mb-2">
             安全验证码
-          </div>
-
-          <button
-            onClick={handleCopy}
-            className="text-5xl font-bold tracking-wider text-gray-900 hover:text-blue-600 transition-colors duration-200 cursor-pointer select-none"
-            aria-label="点击复制验证码"
+          </h2>
+          <div 
+            className={`text-5xl font-bold font-mono tracking-widest ${timeLeft <= 5 ? 'text-red-500 animate-pulse' : 'text-gray-900'} transition-colors`}
+            // 优化点：Token 在服务端生成，客户端可能因时间差跳变，忽略警告
+            suppressHydrationWarning
           >
             {token}
-          </button>
-
-          <div className="text-3xl font-semibold text-gray-700">
+          </div>
+          <div 
+            className={`mt-1 font-mono font-medium ${ringColor}`}
+            suppressHydrationWarning
+          >
             {timeLeft}s
           </div>
-
-          {isCopied && (
-            <div className="absolute -bottom-12 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-4 py-2 rounded-full text-sm font-medium shadow-lg animate-bounce">
-              已复制
-            </div>
-          )}
+          <div className={`mt-4 text-xs font-medium absolute -bottom-10 transition-all duration-300 ${isCopied ? 'opacity-100 text-green-600' : 'opacity-0'}`}>
+            已复制
+          </div>
         </div>
       </div>
-
-      <div className="mt-8 text-sm text-gray-500 max-w-xs text-center break-all px-4">
-        {decodeURIComponent(rawKey || '')}
+      
+      <div className="absolute bottom-6 w-full text-center px-8 opacity-40">
+        <p className="text-[11px] font-mono text-gray-500 truncate">
+          {decodeURIComponent(rawKey || '')}
+        </p>
       </div>
     </div>
   );
