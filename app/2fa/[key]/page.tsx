@@ -1,133 +1,187 @@
 'use client';
 
-import React, { useState, useEffect, use } from 'react';
-import { authenticator } from 'otplib';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 
-// --- 修正点 1 ---
-// Props 类型定义中的参数名必须是 `key`，以匹配文件夹 `[key]`
-export default function AppleStyleDynamic2FA({ params }: { params: Promise<{ key: string }> }) {
-  // --- 修正点 2 ---
-  // 使用 React.use() 解包 Promise
-  const resolvedParams = use(params);
-  // 从解包后的对象中获取正确的 `key` 属性
-  const rawKey = resolvedParams.key;
+// ✅ 优化点 1：移除同步导入，改为动态导入
+// import { authenticator } from 'otplib'; 
 
-  const [token, setToken] = useState<string>('加载中');
+export default function AppleStyle2FA() {
+  const [secret, setSecret] = useState('');
+  const [token, setToken] = useState<string>('--- ---');
   const [timeLeft, setTimeLeft] = useState(30);
-  const [mounted, setMounted] = useState(false);
-  const [isCopied, setIsCopied] = useState(false);
+  const [isTokenCopied, setIsTokenCopied] = useState(false);
+  const [isLinkCopied, setIsLinkCopied] = useState(false);
+  const [isValid, setIsValid] = useState(false);
+  // ✅ 优化点 2：添加加载状态
+  const [isLibLoaded, setIsLibLoaded] = useState(false);
+
+  const formatToken = (t: string) => (t.length === 6 ? `${t.slice(0, 3)} ${t.slice(3)}` : t);
 
   useEffect(() => {
-    setMounted(true);
-
-    const calculate = () => {
-      const now = new Date();
-      setTimeLeft(30 - (now.getSeconds() % 30));
-      
-      // --- 修正点 3 ---
-      // 后续所有逻辑都使用 `rawKey`
-      if (rawKey) {
-        try {
-          const cleanSecret = decodeURIComponent(rawKey).replace(/\s/g, '');
-          const t = authenticator.generate(cleanSecret);
-          setToken(`${t.slice(0, 3)} ${t.slice(3)}`);
-        } catch {
-          setToken('密钥错误');
-        }
+    // ✅ 优化点 3：动态导入 otplib，仅在需要时加载
+    let authenticator: any;
+    
+    const loadLib = async () => {
+      try {
+        const otplib = await import('otplib');
+        authenticator = otplib.authenticator;
+        setIsLibLoaded(true);
+      } catch (error) {
+        console.error('加载验证库失败:', error);
       }
     };
 
-    calculate();
-    const timer = setInterval(calculate, 1000);
+    loadLib();
+
+    const timer = setInterval(() => {
+      const now = new Date();
+      setTimeLeft(30 - (now.getSeconds() % 30));
+
+      // ✅ 优化点 4：等待库加载完成后再生成 token
+      if (isLibLoaded && authenticator && secret && secret.length > 8) {
+        try {
+          const cleanSecret = secret.replace(/\s/g, '');
+          const newToken = authenticator.generate(cleanSecret);
+          setToken(formatToken(newToken));
+          setIsValid(true);
+        } catch {
+          setToken('无效密钥');
+          setIsValid(false);
+        }
+      } else if (!isLibLoaded && secret.length > 8) {
+        setToken('加载中...');
+      } else {
+        setToken('--- ---');
+        setIsValid(false);
+      }
+    }, 1000);
 
     return () => clearInterval(timer);
-  }, [rawKey]); // 依赖项也应该是 rawKey
+  }, [secret, isLibLoaded]);
 
-  const handleCopy = () => {
-    if (token === '密钥错误' || token === '加载中') return;
+  const handleCopyToken = () => {
+    if (!isValid) return;
     navigator.clipboard.writeText(token.replace(/\s/g, ''));
-    setIsCopied(true);
+    setIsTokenCopied(true);
     if (navigator.vibrate) navigator.vibrate(40);
-    setTimeout(() => setIsCopied(false), 2000);
+    setTimeout(() => setIsTokenCopied(false), 2000);
   };
 
-  if (!mounted) {
-    return null;
-  }
-  
-  const baseSize = Math.min(window.innerWidth * 0.75, 340);
-  const radius = baseSize / 2 - 18;
-  const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (timeLeft / 30) * circumference;
+  const handleCopyLink = () => {
+    if (!isValid) return;
+    const cleanSecret = secret.replace(/\s/g, '');
+    const url = `${window.location.origin}/2fa/${encodeURIComponent(cleanSecret)}`;
+    navigator.clipboard.writeText(url);
+    setIsLinkCopied(true);
+    if (navigator.vibrate) navigator.vibrate(40);
+    setTimeout(() => setIsLinkCopied(false), 2000);
+  };
 
-  const ringColor =
-    timeLeft <= 5 ? 'text-red-500' :
-    timeLeft <= 10 ? 'text-orange-400' :
-    'text-blue-500';
-  
-  const bgColor = timeLeft <= 5 ? 'bg-red-50' : 'bg-white/80';
+  const getProgressColor = () =>
+    timeLeft <= 5
+      ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]'
+      : timeLeft <= 10
+      ? 'bg-orange-500'
+      : 'bg-blue-500';
+
+  const getTextColor = () =>
+    !isValid
+      ? 'text-gray-300'
+      : timeLeft <= 5
+      ? 'text-red-500'
+      : timeLeft <= 10
+      ? 'text-orange-500'
+      : 'text-blue-500';
 
   return (
     <div
-      className="min-h-[100dvh] bg-[#F5F5F7] flex flex-col items-center justify-center p-4 relative overflow-hidden"
-      style={{
-        paddingTop: 'env(safe-area-inset-top)',
-        paddingBottom: 'env(safe-area-inset-bottom)'
-      }}
+      className="min-h-[100dvh] bg-[#F5F5F7] flex flex-col items-center justify-center p-4 md:p-6 overflow-hidden relative"
+      style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       <Link
-        href="/2fa"
-        className="absolute left-4 top-[calc(env(safe-area-inset-top)+0.75rem)] flex items-center gap-1.5 px-4 py-2 bg-white/60 backdrop-blur-md border border-white/40 shadow-sm rounded-full text-sm font-medium text-gray-600 hover:bg-white hover:text-gray-900 active:scale-95 transition-all z-20"
+        href="/tools"
+        className="absolute top-[calc(env(safe-area-inset-top)+0.5rem)] left-4 flex items-center gap-1.5 px-3 py-2 bg-white/60 backdrop-blur-md border border-white/40 shadow-sm rounded-full text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-white transition active:scale-95 z-20"
       >
-        <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M15 18l-6-6 6-6" />
         </svg>
-        <span>主页</span>
+        <span>工具箱</span>
       </Link>
-      
-      <div
-        onClick={handleCopy}
-        className={`relative flex items-center justify-center rounded-full cursor-pointer ${bgColor} shadow-[0_20px_60px_-15px_rgba(0,0,0,0.18)] touch-manipulation active:scale-[0.97] backdrop-blur-xl transition-all duration-300`}
-        style={{ width: baseSize, height: baseSize }}
-      >
-        <svg className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none">
-          <circle
-            cx="50%" cy="50%" r={radius}
-            fill="none" stroke="#E5E7EB"
-            strokeWidth="12"
-          />
-          <circle
-            cx="50%" cy="50%" r={radius}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="12"
-            strokeLinecap="round"
-            className={`${ringColor} transition-all duration-[900ms] ease-linear drop-shadow-lg`}
-            style={{ strokeDasharray: circumference, strokeDashoffset }}
-          />
-        </svg>
-        
-        <div className="flex flex-col items-center z-10 select-none">
-          <h2 className="text-xs font-bold text-gray-400 tracking-widest uppercase mb-2">
-            安全验证码
-          </h2>
-          <div className={`text-5xl font-bold font-mono tracking-widest ${timeLeft <= 5 ? 'text-red-500 animate-pulse' : 'text-gray-900'} transition-colors`}>
+
+      <div className="w-full max-w-md bg-white/80 backdrop-blur-xl border border-white/40 shadow-xl rounded-2xl p-5 md:p-8 transition-all duration-300">
+        <div className="text-center mb-6">
+          <h1 className="text-xl md:text-2xl font-semibold text-gray-900">两步验证</h1>
+        </div>
+
+        <div
+          onClick={handleCopyToken}
+          className="relative bg-white rounded-xl p-6 mb-6 shadow-sm border border-gray-100 flex flex-col items-center justify-center cursor-pointer transition-all active:scale-[0.97] touch-manipulation overflow-hidden"
+        >
+          {isValid && (
+            <div className={`absolute top-3 right-4 font-mono text-sm font-bold ${getTextColor()}`}>{timeLeft}s</div>
+          )}
+          <div
+            className={`text-4xl md:text-5xl font-bold tracking-widest font-mono z-10 transition-colors ${
+              timeLeft <= 5 && isValid ? 'text-red-500 animate-pulse' : 'text-gray-900'
+            }`}
+          >
             {token}
           </div>
-          <div className={`mt-1 font-mono font-medium ${ringColor}`}>
-            {timeLeft}s
+          <div
+            className={`mt-3 text-xs font-medium z-10 transition-colors ${
+              isTokenCopied ? 'text-green-500 scale-105' : 'text-gray-400 group-hover:text-blue-500'
+            }`}
+          >
+            {isTokenCopied ? '已复制 ✓' : '点击复制'}
           </div>
-          <div className={`mt-4 text-xs font-medium absolute -bottom-10 transition-all duration-300 ${isCopied ? 'opacity-100 text-green-600' : 'opacity-0'}`}>
-            已复制
-          </div>
+          {isValid && (
+            <div className="absolute bottom-0 left-0 w-full h-1.5 bg-gray-100">
+              <div
+                className={`h-full transition-all duration-1000 ease-linear ${getProgressColor()}`}
+                style={{ width: `${(timeLeft / 30) * 100}%` }}
+              />
+            </div>
+          )}
         </div>
-      </div>
-      
-      <div className="absolute bottom-6 w-full text-center px-8 opacity-40">
-        <p className="text-[11px] font-mono text-gray-500 truncate">
-          {decodeURIComponent(rawKey || '')}
-        </p>
+
+        <div className="space-y-2">
+          <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider ml-1">
+            密钥
+          </label>
+          <input
+            type="text"
+            value={secret}
+            onChange={(e) => setSecret(e.target.value)}
+            placeholder="在此粘贴密钥..."
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            inputMode="text"
+            className="w-full bg-gray-100/80 border-0 rounded-xl px-4 py-3 text-base text-gray-800 placeholder-gray-400 focus:ring-2 focus:ring-blue-500/50 focus:bg-white transition-all outline-none font-medium"
+          />
+        </div>
+
+        <div
+          className={`overflow-hidden transition-all duration-500 ease-in-out ${
+            isValid ? 'max-h-20 opacity-100 mt-4' : 'max-h-0 opacity-0'
+          }`}
+        >
+          <button
+            onClick={handleCopyLink}
+            className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-medium active:scale-95 ${
+              isLinkCopied
+                ? 'bg-green-500 text-white shadow-green-200'
+                : 'bg-blue-500 text-white shadow-blue-200 hover:bg-blue-600'
+            } shadow-lg transition-all`}
+          >
+            {isLinkCopied ? '链接已复制' : '复制快捷访问链接'}
+          </button>
+        </div>
+
+        <div className="mt-6 text-center">
+          <p className="text-[10px] text-gray-400">本地生成 · 安全可靠</p>
+        </div>
       </div>
     </div>
   );
