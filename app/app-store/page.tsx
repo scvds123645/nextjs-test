@@ -63,7 +63,7 @@ const apps: AppItem[] = [
     category: '服务',
     rating: 4.4,
     iconUrl: 'https://www.584136.xyz/%E5%A4%B4%E5%83%8F/telegam@fb180.jpg',
-    downloadUrl: 'https://fh10.zmfaka.cn/item/c24vp9/',
+    downloadUrl: '/fb',
   },
   {
     id: '6',
