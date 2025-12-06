@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useRef } from "react";
-import Link from "next/link";
 import { 
   ArrowLeft, 
   Copy, 
@@ -26,7 +25,7 @@ export default function UnifiedFormatTool() {
   
   const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // --- 核心转换逻辑 ---
+  // --- 核心转换逻辑 (修改后的格式) ---
   const handleConvert = () => {
     if (!input.trim()) return;
 
@@ -48,9 +47,9 @@ export default function UnifiedFormatTool() {
 
         switch (mode) {
           case "full":
-            return `${uid}--${password}--c_user=${uid}; xs=${xs};`;
+            return `账号${uid}密码${password}数据c_user=${uid}; xs=${xs};`;
           case "short":
-            return `${uid}--${password}`;
+            return `账号${uid}密码${password}`;
           case "cookie":
             return `c_user=${uid}; xs=${xs};`;
           default:
@@ -91,12 +90,11 @@ export default function UnifiedFormatTool() {
       {/* 1. 顶部导航栏 */}
       <header className="sticky top-0 z-30 flex items-center justify-between bg-white/90 px-4 h-14 backdrop-blur-md border-b border-gray-200 shadow-sm">
         <div className="flex items-center gap-3">
-          <Link 
-            href="/tools" 
+          <button 
             className="p-2 -ml-2 rounded-full hover:bg-gray-100 active:bg-gray-200 transition-colors"
           >
             <ArrowLeft className="h-5 w-5 text-gray-600" />
-          </Link>
+          </button>
           <h1 className="text-lg font-bold tracking-tight">账号/Cookie 格式化</h1>
         </div>
         
@@ -109,7 +107,7 @@ export default function UnifiedFormatTool() {
 
       <main className="p-4 space-y-4 max-w-md mx-auto">
         
-        {/* 2. 设置面板 (紧凑版，移除多余Header) */}
+        {/* 2. 设置面板 */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 space-y-3">
             {/* 模式选择 */}
             <div className="space-y-1.5">
@@ -169,7 +167,7 @@ export default function UnifiedFormatTool() {
             </div>
         </div>
 
-        {/* 3. 输入区域 (优化占位符显示) */}
+        {/* 3. 输入区域 */}
         <div className="relative group">
           <label className="block text-xs font-bold text-gray-500 mb-1.5 ml-1">原始数据</label>
           <textarea
