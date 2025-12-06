@@ -1,8 +1,14 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { authenticator } from 'otplib';
+import React, { useState, useEffect, useRef } from 'react';
+// 移除静态导入: import { authenticator } from 'otplib';
 import Link from 'next/link';
+
+// 定义 authenticator 的类型接口，方便 TypeScript 推断 (可选，视具体需求而定)
+type AuthenticatorType = {
+  generate: (secret: string) => string;
+  [key: string]: any;
+};
 
 export default function AppleStyle2FA() {
   const [secret, setSecret] = useState('');
@@ -12,23 +18,56 @@ export default function AppleStyle2FA() {
   const [isLinkCopied, setIsLinkCopied] = useState(false);
   const [isValid, setIsValid] = useState(false);
 
+  // 使用 useRef 存储动态加载的 authenticator 实例
+  // 这样不会触发重渲染，且能在 setInterval 中即时访问
+  const authenticatorRef = useRef<AuthenticatorType | null>(null);
+
   const formatToken = (t: string) => (t.length === 6 ? `${t.slice(0, 3)} ${t.slice(3)}` : t);
+
+  // 优化点 1: 异步加载 otplib 库
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadLibrary = async () => {
+      try {
+        // 动态导入：Next.js 会自动将其分割为单独的 JS 文件
+        const otplib = await import('otplib');
+        if (isMounted) {
+          authenticatorRef.current = otplib.authenticator;
+        }
+      } catch (error) {
+        console.error('Failed to load crypto library', error);
+      }
+    };
+
+    loadLibrary();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
       setTimeLeft(30 - (now.getSeconds() % 30));
 
-      if (secret && secret.length > 8) {
+      // 优化点 2: 只有当库加载完成 (authenticatorRef.current 存在) 时才进行计算
+      if (secret && secret.length > 8 && authenticatorRef.current) {
         try {
           const cleanSecret = secret.replace(/\s/g, '');
-          const newToken = authenticator.generate(cleanSecret);
+          // 使用 ref 中的实例调用 generate
+          const newToken = authenticatorRef.current.generate(cleanSecret);
           setToken(formatToken(newToken));
           setIsValid(true);
         } catch {
           setToken('无效密钥');
           setIsValid(false);
         }
+      } else if (!authenticatorRef.current && secret.length > 8) {
+        // 库还在加载中时的临时状态（可选）
+        setToken('加载中...');
+        setIsValid(false);
       } else {
         setToken('--- ---');
         setIsValid(false);
@@ -49,9 +88,6 @@ export default function AppleStyle2FA() {
   const handleCopyLink = () => {
     if (!isValid) return;
     const cleanSecret = secret.replace(/\s/g, '');
-    // --- 修正点 ---
-    // 修正了 URL 路径，之前是 /2fa/2fa/，现在是 /2fa/
-    // 同时使用 encodeURIComponent 来确保密钥中的特殊字符被正确编码
     const url = `${window.location.origin}/2fa/${encodeURIComponent(cleanSecret)}`;
     navigator.clipboard.writeText(url);
     setIsLinkCopied(true);
@@ -80,7 +116,6 @@ export default function AppleStyle2FA() {
       className="min-h-[100dvh] bg-[#F5F5F7] flex flex-col items-center justify-center p-4 md:p-6 overflow-hidden relative"
       style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
-      {/* 返回按钮 */}
       <Link
         href="/tools"
         className="absolute top-[calc(env(safe-area-inset-top)+0.5rem)] left-4 flex items-center gap-1.5 px-3 py-2 bg-white/60 backdrop-blur-md border border-white/40 shadow-sm rounded-full text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-white transition active:scale-95 z-20"
@@ -90,12 +125,12 @@ export default function AppleStyle2FA() {
         </svg>
         <span>工具箱</span>
       </Link>
-      {/* 主卡片 */}
+      
       <div className="w-full max-w-md bg-white/80 backdrop-blur-xl border border-white/40 shadow-xl rounded-2xl p-5 md:p-8 transition-all duration-300">
         <div className="text-center mb-6">
           <h1 className="text-xl md:text-2xl font-semibold text-gray-900">两步验证</h1>
         </div>
-        {/* 验证码卡 */}
+        
         <div
           onClick={handleCopyToken}
           className="relative bg-white rounded-xl p-6 mb-6 shadow-sm border border-gray-100 flex flex-col items-center justify-center cursor-pointer transition-all active:scale-[0.97] touch-manipulation overflow-hidden"
@@ -126,7 +161,7 @@ export default function AppleStyle2FA() {
             </div>
           )}
         </div>
-        {/* 输入框 */}
+        
         <div className="space-y-2">
           <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider ml-1">
             密钥
@@ -143,7 +178,7 @@ export default function AppleStyle2FA() {
             className="w-full bg-gray-100/80 border-0 rounded-xl px-4 py-3 text-base text-gray-800 placeholder-gray-400 focus:ring-2 focus:ring-blue-500/50 focus:bg-white transition-all outline-none font-medium"
           />
         </div>
-        {/* 链接按钮 */}
+        
         <div
           className={`overflow-hidden transition-all duration-500 ease-in-out ${
             isValid ? 'max-h-20 opacity-100 mt-4' : 'max-h-0 opacity-0'
