@@ -6,7 +6,7 @@ export default function PasswordFilter() {
   const [input, setInput] = useState('');
   const [output, setOutput] = useState('');
 
-const filterPasswords = (text: string) => {
+  const filterPasswords = (text: string) => {
     if (!text.trim()) {
       setOutput('');
       return;
@@ -31,7 +31,7 @@ const filterPasswords = (text: string) => {
     setOutput(filtered.join('\n'));
   };
 
-  const handleInputChange = (e) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     setInput(value);
     filterPasswords(value);
