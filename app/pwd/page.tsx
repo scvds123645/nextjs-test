@@ -6,7 +6,7 @@ export default function PasswordFilter() {
   const [input, setInput] = useState('');
   const [output, setOutput] = useState('');
 
-  const filterPasswords = (text) => {
+const filterPasswords = (text: string) => {
     if (!text.trim()) {
       setOutput('');
       return;
