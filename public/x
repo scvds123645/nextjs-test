@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter/X Cookie 注入器
 // @namespace    http://tampermonkey.net/
-// @version      2.1.0
+// @version      2.0
 // @description  Twitter/X 专用 Cookie 注入、备份、导入、删除工具 (支持 auth_token, ct0, twid 等)
 // @author       You
 // @match        *://*.twitter.com/*
