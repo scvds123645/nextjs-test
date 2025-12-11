@@ -9,9 +9,19 @@ export default function DomainExtractor() {
   const [copied, setCopied] = useState(false);
 
   const extractDomains = (text: string) => {
+    // ========== 自定义配置区域 ==========
     // 定义起始和结束标记
     const startMarker = '00two.shop';
     const endMarker = 'zxcc.lol';
+    
+    // 需要过滤掉的域名列表（这些域名不会出现在最终结果中）
+    const FILTERED_DOMAINS = [
+      'mail-imap.yopmail.com',
+      // 在这里添加更多需要过滤的域名
+      // 'example.com',
+      // 'test.com',
+    ];
+    // ===================================
     
     // 找到起始和结束位置
     const startIndex = text.indexOf(startMarker);
@@ -33,8 +43,12 @@ export default function DomainExtractor() {
     // 去重并保持原始顺序
     const uniqueDomains = [...new Set(domains)];
     
-    // 将 yopmail.com 放在第一个位置，并确保不重复
-    const filteredDomains = uniqueDomains.filter(d => d !== 'yopmail.com');
+    // 过滤掉不需要的域名（包括 yopmail.com 和自定义过滤列表）
+    const filteredDomains = uniqueDomains.filter(d => 
+      d !== 'yopmail.com' && !FILTERED_DOMAINS.includes(d)
+    );
+    
+    // 将 yopmail.com 放在第一个位置
     const finalDomains = ['yopmail.com', ...filteredDomains];
     
     // 转换为 JSON 数组格式
@@ -168,6 +182,10 @@ export default function DomainExtractor() {
             <li className="flex items-start gap-2">
               <span className="text-blue-600 font-bold">4.</span>
               <span>使用"复制"或"下载"按钮保存结果</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-600 font-bold">5.</span>
+              <span>已自动过滤 mail-imap.yopmail.com 等不需要的域名</span>
             </li>
           </ul>
         </div>
