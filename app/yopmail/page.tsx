@@ -18,6 +18,7 @@ export default function DomainExtractor() {
     const FILTERED_DOMAINS = [
       'mail-imap.yopmail.com',
 	  'fenart.site',
+	  'lindaontheweb.com',
       // 在这里添加更多需要过滤的域名
       // 'example.com',
       // 'test.com',
