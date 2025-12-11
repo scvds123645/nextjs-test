@@ -1,0 +1,837 @@
+// ==UserScript==
+// @name         Twitter/X Cookie 注入器
+// @namespace    http://tampermonkey.net/
+// @version      2.1.0
+// @description  Twitter/X 专用 Cookie 注入、备份、导入、删除工具 (支持 auth_token, ct0, twid 等)
+// @author       You
+// @match        *://*.twitter.com/*
+// @match        *://*.x.com/*
+// @grant        none
+// @run-at       document-end
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    // 图标资源
+    const ICONS = {
+        cookie: `<svg height="24px" width="24px" viewBox="0 0 24 24" fill="#FFFFFF" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>`, // 通用星球/网络图标
+        account_circle: `<svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 0 24 24" width="20px" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 4c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm0 14c-2.03 0-4.43-.82-6.14-2.88C7.55 15.8 9.68 15 12 15s4.45.8 6.14 2.12C16.43 19.18 14.03 20 12 20z"/></svg>`,
+        warning: `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>`,
+        check: `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>`,
+        info: `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>`
+    };
+
+    const SELECTORS = {
+        FAB: '#cookie-manager-fab',
+        BOTTOM_SHEET: '#cookie-manager-bottom-sheet',
+        SCRIM: '#cookie-manager-scrim',
+        TEXT_FIELD: '#cookie-input',
+        BTN_INJECT: '#btn-inject',
+        BTN_BACKUP: '#btn-backup',
+        BTN_IMPORT: '#btn-import',
+        INPUT_FILE: '#cookie-file-input',
+        BTN_DELETE: '#btn-delete',
+        BTN_CLOSE: '#btn-close',
+        WATERMARK: '#cookie-manager-watermark',
+        TIME_DISPLAY: '#cookie-manager-time',
+        DATE_DISPLAY: '#cookie-manager-date',
+        DIALOG: '#cookie-manager-dialog',
+    };
+
+    // 关键 Cookie 字段定义
+    const COOKIE_KEYS = {
+        AUTH: 'auth_token',
+        CT0: 'ct0',
+        TWID: 'twid'
+    };
+
+    // 检测设备类型
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+
+    const DialogManager = (function() {
+        function showDialog({ type = 'info', title, message, confirmText = '确定', cancelText = '取消', onConfirm, showCancel = false, countdown = 0, allowDismiss = true }) {
+            const existingDialog = document.querySelector(SELECTORS.DIALOG);
+            if (existingDialog) existingDialog.remove();
+
+            const existingScrim = document.querySelectorAll(`${SELECTORS.SCRIM}`);
+            existingScrim.forEach(s => {
+                if (s.style.zIndex === '2999') s.remove();
+            });
+
+            const dialogScrim = document.createElement('div');
+            dialogScrim.id = SELECTORS.SCRIM.substring(1);
+            dialogScrim.classList.add('show');
+            dialogScrim.style.zIndex = '2999';
+
+            const iconMap = {
+                info: ICONS.info,
+                warning: ICONS.warning,
+                error: ICONS.warning,
+                success: ICONS.check
+            };
+
+            const dialog = document.createElement('div');
+            dialog.id = SELECTORS.DIALOG.substring(1);
+            dialog.className = 'cookie-manager-base';
+            dialog.innerHTML = `
+                <div class="dialog-header">
+                    <span class="dialog-icon dialog-icon-${type}">${iconMap[type] || ICONS.info}</span>
+                    <h3 class="dialog-title">${title}</h3>
+                </div>
+                <p class="dialog-content">${message}</p>
+                <div class="dialog-actions">
+                    ${showCancel ? `<button class="btn btn-text" id="dialog-btn-cancel">${cancelText}</button>` : ''}
+                    <button class="btn btn-text" id="dialog-btn-confirm">${confirmText}</button>
+                </div>
+            `;
+
+            document.body.append(dialogScrim, dialog);
+
+            const confirmBtn = dialog.querySelector('#dialog-btn-confirm');
+            const cancelBtn = dialog.querySelector('#dialog-btn-cancel');
+
+            if (countdown > 0) {
+                confirmBtn.disabled = true;
+                confirmBtn.style.opacity = '0.6';
+                confirmBtn.style.cursor = 'not-allowed';
+                let count = countdown;
+                confirmBtn.textContent = `${confirmText} (${count})`;
+                const interval = setInterval(() => {
+                    count--;
+                    if (count > 0) {
+                        confirmBtn.textContent = `${confirmText} (${count})`;
+                    } else {
+                        clearInterval(interval);
+                        confirmBtn.disabled = false;
+                        confirmBtn.textContent = confirmText;
+                        confirmBtn.style.opacity = '1';
+                        confirmBtn.style.cursor = 'pointer';
+                    }
+                }, 1000);
+            }
+
+            setTimeout(() => dialog.classList.add('show'), 10);
+
+            const close = (confirmed = false) => {
+                dialog.classList.remove('show');
+                dialogScrim.classList.remove('show');
+                setTimeout(() => {
+                    dialog.remove();
+                    dialogScrim.remove();
+                    if (confirmed && onConfirm) onConfirm();
+                }, 200);
+            };
+
+            confirmBtn.addEventListener('click', () => close(true));
+            if (cancelBtn) cancelBtn.addEventListener('click', () => close(false));
+            
+            if (allowDismiss && !showCancel) {
+                dialogScrim.addEventListener('click', () => close(false));
+            }
+
+            return { close };
+        }
+
+        return { showDialog };
+    })();
+
+    const UIManager = (function() {
+        let bottomSheet, scrim, fab;
+
+        function appendStyles() {
+            const style = document.createElement('style');
+            style.textContent = `
+                :root {
+                    --md-sys-color-primary: #1D9BF0; /* Twitter Blue */
+                    --md-sys-color-on-primary: #FFFFFF;
+                    --md-sys-color-primary-container: #D3E4FF;
+                    --md-sys-color-on-primary-container: #001D36;
+                    --md-sys-color-error: #F4212E; /* Twitter Red */
+                    --md-sys-color-on-error: #FFFFFF;
+                    --md-sys-color-success: #00BA7C; /* Twitter Green */
+                    --md-sys-color-surface-container-low: #FFFFFF;
+                    --md-sys-color-outline: #CFD9DE;
+                    --md-sys-color-scrim: #000000;
+                    --md-sys-color-on-surface: #0F1419;
+                    --md-sys-color-on-surface-variant: #536471;
+                    --md-sys-color-surface-container-highest: #EFF3F4;
+                }
+
+                /* Dark mode adaptation if Twitter is dark */
+                @media (prefers-color-scheme: dark) {
+                     /* 这里可以添加暗色模式支持，暂时保持亮色UI以确保可读性 */
+                }
+
+                .cookie-manager-base, .cookie-manager-base * {
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                    box-sizing: border-box;
+                    -webkit-tap-highlight-color: transparent;
+                }
+
+                ${SELECTORS.FAB} {
+                    position: fixed;
+                    bottom: ${isMobile ? '70px' : '80px'};
+                    right: ${isMobile ? '16px' : '20px'};
+                    width: ${isMobile ? '48px' : '56px'};
+                    height: ${isMobile ? '48px' : '56px'};
+                    background-color: var(--md-sys-color-primary);
+                    color: var(--md-sys-color-on-primary);
+                    border: none;
+                    border-radius: 50%;
+                    box-shadow: 0 4px 8px 3px rgba(0,0,0,0.15), 0 1px 3px rgba(0,0,0,0.3);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    cursor: pointer;
+                    z-index: 1000;
+                    transition: box-shadow 0.2s ease-out, transform 0.2s ease;
+                    user-select: none;
+                    touch-action: none;
+                }
+
+                ${SELECTORS.FAB}:active {
+                    transform: scale(0.95);
+                }
+
+                ${SELECTORS.FAB} svg {
+                    fill: var(--md-sys-color-on-primary);
+                    width: ${isMobile ? '24px' : '28px'};
+                    height: ${isMobile ? '24px' : '28px'};
+                }
+
+                ${SELECTORS.BOTTOM_SHEET} {
+                    position: fixed;
+                    bottom: 0;
+                    left: 0;
+                    right: 0;
+                    background-color: var(--md-sys-color-surface-container-low);
+                    color: var(--md-sys-color-on-surface);
+                    border-top-left-radius: 20px;
+                    border-top-right-radius: 20px;
+                    padding: ${isMobile ? '4px 16px 24px 16px' : '4px 24px 24px 24px'};
+                    z-index: 2000;
+                    box-shadow: 0 -4px 10px rgba(0,0,0,0.1);
+                    max-height: 85vh;
+                    overflow-y: auto;
+                    transform: translateY(100%);
+                    transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+                    display: flex;
+                    flex-direction: column;
+                    gap: ${isMobile ? '12px' : '16px'};
+                }
+
+                ${SELECTORS.BOTTOM_SHEET}.show {
+                    transform: translateY(0);
+                }
+
+                .drag-handle {
+                    width: 36px;
+                    height: 4px;
+                    background-color: var(--md-sys-color-outline);
+                    border-radius: 2px;
+                    margin: 12px auto;
+                    cursor: grab;
+                }
+
+                .bottom-sheet-title {
+                    font-size: 20px;
+                    font-weight: 700;
+                    text-align: center;
+                    margin: 4px 0;
+                }
+
+                ${SELECTORS.SCRIM} {
+                    position: fixed;
+                    inset: 0;
+                    background-color: var(--md-sys-color-scrim);
+                    opacity: 0;
+                    z-index: 1999;
+                    pointer-events: none;
+                    transition: opacity 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+                }
+
+                ${SELECTORS.SCRIM}.show {
+                    opacity: 0.4;
+                    pointer-events: auto;
+                }
+
+                .text-field-container {
+                    position: relative;
+                    margin: 8px 0;
+                }
+
+                ${SELECTORS.TEXT_FIELD} {
+                    width: 100%;
+                    height: ${isMobile ? '80px' : '100px'};
+                    padding: 12px;
+                    border-radius: 4px;
+                    border: 1px solid var(--md-sys-color-outline);
+                    background-color: transparent;
+                    font-size: 14px;
+                    resize: none;
+                    color: var(--md-sys-color-on-surface);
+                }
+
+                ${SELECTORS.TEXT_FIELD}:focus {
+                    outline: 2px solid var(--md-sys-color-primary);
+                    border-color: transparent;
+                }
+
+                .helper-text {
+                    font-size: 12px;
+                    color: var(--md-sys-color-on-surface-variant);
+                    padding: 0 4px;
+                }
+
+                .btn {
+                    height: 44px;
+                    border: none;
+                    border-radius: 22px;
+                    font-size: 15px;
+                    font-weight: 700;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 0 24px;
+                    transition: opacity 0.2s;
+                }
+
+                .btn:active {
+                    opacity: 0.8;
+                }
+
+                .btn-filled {
+                    background-color: var(--md-sys-color-on-surface); /* Twitter Black for main action */
+                    color: #FFFFFF;
+                }
+
+                .btn-outlined {
+                    background-color: transparent;
+                    color: var(--md-sys-color-on-surface);
+                    border: 1px solid var(--md-sys-color-outline);
+                }
+
+                .btn-text {
+                    background-color: transparent;
+                    color: var(--md-sys-color-on-surface-variant);
+                }
+
+                .btn-text.error {
+                    color: var(--md-sys-color-error);
+                }
+
+                .button-row {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 12px;
+                }
+
+                .button-group {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 12px;
+                    margin-top: 8px;
+                }
+
+                ${SELECTORS.WATERMARK} {
+                    position: fixed;
+                    top: 12px;
+                    left: 12px;
+                    height: 36px;
+                    background-color: rgba(255, 255, 255, 0.9);
+                    color: #0F1419;
+                    border-radius: 18px;
+                    padding: 0 16px 0 10px;
+                    font-size: 13px;
+                    font-weight: 600;
+                    z-index: 999;
+                    cursor: grab;
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+                    border: 1px solid rgba(0,0,0,0.05);
+                }
+
+                ${SELECTORS.WATERMARK} svg {
+                    width: 18px;
+                    height: 18px;
+                }
+
+                ${isMobile ? `
+                    ${SELECTORS.DATE_DISPLAY}, 
+                    ${SELECTORS.TIME_DISPLAY} {
+                        display: none;
+                    }
+                ` : ''}
+
+                ${SELECTORS.DIALOG} {
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%) scale(0.95);
+                    background-color: var(--md-sys-color-surface-container-low);
+                    border-radius: 16px;
+                    width: calc(100vw - 32px);
+                    max-width: 320px;
+                    padding: 24px;
+                    z-index: 3000;
+                    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+                    opacity: 0;
+                    transition: opacity 0.2s ease, transform 0.2s ease;
+                }
+
+                ${SELECTORS.DIALOG}.show {
+                    opacity: 1;
+                    transform: translate(-50%, -50%) scale(1);
+                }
+
+                .dialog-title {
+                    font-size: 20px;
+                    margin: 0 0 12px 0;
+                }
+
+                .dialog-actions {
+                    display: flex;
+                    justify-content: flex-end;
+                    gap: 8px;
+                    margin-top: 20px;
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        function createElements() {
+            const container = document.createElement('div');
+            container.classList.add('cookie-manager-base');
+
+            fab = document.createElement('button');
+            fab.id = SELECTORS.FAB.substring(1);
+            fab.innerHTML = ICONS.cookie;
+            fab.setAttribute('aria-label', 'Open Cookie Manager');
+
+            scrim = document.createElement('div');
+            scrim.id = SELECTORS.SCRIM.substring(1);
+
+            bottomSheet = document.createElement('div');
+            bottomSheet.id = SELECTORS.BOTTOM_SHEET.substring(1);
+            bottomSheet.innerHTML = `
+                <div class="drag-handle"></div>
+                <h2 class="bottom-sheet-title">Twitter/X Cookie 注入器</h2>
+                <div class="text-field-container">
+                    <textarea id="${SELECTORS.TEXT_FIELD.substring(1)}" class="cookie-manager-base" placeholder="auth_token=...; ct0=..."></textarea>
+                </div>
+                <div class="helper-text">支持粘贴完整的 auth_token, gt, guest_id 等字符串</div>
+                <div class="button-group">
+                    <button class="btn btn-filled" id="${SELECTORS.BTN_INJECT.substring(1)}">注入并刷新</button>
+                    <div class="button-row">
+                        <button class="btn btn-outlined" id="${SELECTORS.BTN_BACKUP.substring(1)}">备份</button>
+                        <button class="btn btn-outlined" id="${SELECTORS.BTN_IMPORT.substring(1)}">导入</button>
+                    </div>
+                    <div class="button-row">
+                        <button class="btn btn-text error" id="${SELECTORS.BTN_DELETE.substring(1)}">清空登录</button>
+                        <button class="btn btn-text" id="${SELECTORS.BTN_CLOSE.substring(1)}">关闭</button>
+                    </div>
+                </div>
+                <input type="file" id="${SELECTORS.INPUT_FILE.substring(1)}" class="file-input" style="display:none" accept=".txt">
+            `;
+
+            container.append(fab, scrim, bottomSheet);
+            document.body.appendChild(container);
+
+            if (isMobile) {
+                setupDragToClose();
+            }
+        }
+
+        function setupDragToClose() {
+            const dragHandle = bottomSheet.querySelector('.drag-handle');
+            let startY = 0;
+            let currentY = 0;
+            let isDragging = false;
+
+            const handleStart = (e) => {
+                const touch = e.type === 'touchstart' ? e.touches[0] : e;
+                startY = touch.clientY;
+                isDragging = true;
+                bottomSheet.style.transition = 'none';
+            };
+
+            const handleMove = (e) => {
+                if (!isDragging) return;
+                const touch = e.type === 'touchmove' ? e.touches[0] : e;
+                currentY = touch.clientY - startY;
+                if (currentY > 0) {
+                    bottomSheet.style.transform = `translateY(${currentY}px)`;
+                }
+            };
+
+            const handleEnd = () => {
+                if (!isDragging) return;
+                isDragging = false;
+                bottomSheet.style.transition = '';
+                
+                if (currentY > 100) {
+                    togglePanel(false);
+                } else {
+                    bottomSheet.style.transform = 'translateY(0)';
+                }
+                currentY = 0;
+            };
+
+            dragHandle.addEventListener('touchstart', handleStart, { passive: true });
+            dragHandle.addEventListener('mousedown', handleStart);
+            document.addEventListener('touchmove', handleMove, { passive: true });
+            document.addEventListener('mousemove', handleMove);
+            document.addEventListener('touchend', handleEnd);
+            document.addEventListener('mouseup', handleEnd);
+        }
+
+        function togglePanel(visible) {
+            const show = typeof visible === 'boolean' ? visible : !bottomSheet.classList.contains('show');
+            bottomSheet.classList.toggle('show', show);
+            scrim.classList.toggle('show', show);
+            
+            if (isMobile) {
+                document.body.style.overflow = show ? 'hidden' : '';
+            }
+        }
+
+        return {
+            init: function() {
+                appendStyles();
+                createElements();
+            },
+            togglePanel,
+            getCookieInput: () => document.querySelector(SELECTORS.TEXT_FIELD).value,
+            setCookieInput: (value) => {
+                document.querySelector(SELECTORS.TEXT_FIELD).value = value;
+            },
+            getFileInputElement: () => document.querySelector(SELECTORS.INPUT_FILE),
+            getFab: () => document.querySelector(SELECTORS.FAB),
+            getScrim: () => document.querySelector(SELECTORS.SCRIM),
+            getButton: (selector) => document.querySelector(selector)
+        };
+    })();
+
+    const CookieService = (function() {
+        function getCookie(name) {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+            return null;
+        }
+
+        function setCookie(name, value, days = 365) {
+            const expires = new Date();
+            expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
+            // 自动判断域名，兼容 x.com 和 twitter.com
+            const hostname = window.location.hostname;
+            let domain = hostname;
+            if (hostname.endsWith('twitter.com')) domain = '.twitter.com';
+            else if (hostname.endsWith('x.com')) domain = '.x.com';
+            
+            document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/;domain=${domain};secure`;
+        }
+
+        // 解析包含多个 key=value 的 cookie 字符串
+        function parseAllCookies(cookieStr) {
+            const cookies = {};
+            const items = cookieStr.split(';');
+            items.forEach(item => {
+                const parts = item.trim().split('=');
+                if (parts.length >= 2) {
+                    const key = parts[0].trim();
+                    // 将剩余部分重新组合（防止 value 中包含 = 号）
+                    const value = parts.slice(1).join('=');
+                    if (key && value) {
+                        cookies[key] = value;
+                    }
+                }
+            });
+            return cookies;
+        }
+
+        function injectAndReload() {
+            const input = UIManager.getCookieInput();
+            if (!input) {
+                DialogManager.showDialog({
+                    type: 'warning',
+                    title: '输入为空',
+                    message: '请先粘贴 Cookie 字符串!'
+                });
+                return;
+            }
+
+            const cookies = parseAllCookies(input);
+            
+            // 检查是否有核心字段
+            if (!cookies[COOKIE_KEYS.AUTH]) {
+                DialogManager.showDialog({
+                    type: 'error',
+                    title: 'Cookie 无效',
+                    message: '未检测到 auth_token 字段。\n这是 Twitter 登录所必需的。'
+                });
+                return;
+            }
+
+            let injectedCount = 0;
+            for (const [key, value] of Object.entries(cookies)) {
+                // 排除一些无用或只读的字段 (可选)
+                setCookie(key, value);
+                injectedCount++;
+            }
+
+            DialogManager.showDialog({
+                type: 'success',
+                title: '注入成功',
+                message: `已写入 ${injectedCount} 个 Cookie 字段。\n\n页面将在 2 秒后跳转...`,
+                onConfirm: () => {
+                    setTimeout(() => window.location.href = window.location.origin, 500);
+                }
+            });
+            setTimeout(() => window.location.href = window.location.origin, 2000);
+        }
+
+        function backupCookies() {
+            // 获取当前域下的所有 Cookie
+            const cookies = document.cookie.split(';').map(c => c.trim());
+            let cookieStr = cookies.join('; ');
+
+            // 尝试提取用户ID作为文件名的一部分
+            let filenameID = 'unknown';
+            const authToken = getCookie(COOKIE_KEYS.AUTH);
+            
+            if (!authToken) {
+                DialogManager.showDialog({
+                    type: 'error',
+                    title: '备份失败',
+                    message: '当前未登录或未找到 auth_token。'
+                });
+                return;
+            }
+
+            // 尝试从 twid 中解析 ID (twid 格式通常是 u%3D123456)
+            const twid = getCookie(COOKIE_KEYS.TWID);
+            if (twid) {
+                const match = decodeURIComponent(twid).match(/u=([0-9]+)/);
+                if (match) filenameID = match[1];
+            }
+
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+            const filename = `twitter_${filenameID}_${timestamp}.txt`;
+
+            const blob = new Blob([cookieStr], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            DialogManager.showDialog({
+                type: 'success',
+                title: '备份成功',
+                message: `文件名: ${filename}\n\n已开始下载。`
+            });
+        }
+
+        function importFromFile(fileInput) {
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                UIManager.setCookieInput(e.target.result);
+                DialogManager.showDialog({
+                    type: 'success',
+                    title: '导入成功',
+                    message: '内容已导入输入框，请点击"注入并刷新"。'
+                });
+            };
+            reader.readAsText(file);
+            fileInput.value = '';
+        }
+
+        function deleteAllCookies() {
+            DialogManager.showDialog({
+                type: 'warning',
+                title: '确认清空',
+                message: '此操作将删除当前域下的所有 Cookie，导致退出登录。\n\n确定要继续吗?',
+                confirmText: '清空并退出',
+                cancelText: '取消',
+                showCancel: true,
+                onConfirm: () => {
+                    const cookies = document.cookie.split(';');
+                    const hostname = window.location.hostname;
+                    let domain = hostname;
+                    if (hostname.endsWith('twitter.com')) domain = '.twitter.com';
+                    else if (hostname.endsWith('x.com')) domain = '.x.com';
+
+                    cookies.forEach(cookie => {
+                        const name = cookie.split('=')[0].trim();
+                        if (name) {
+                            // 尝试多种路径和域组合以确保彻底删除
+                            document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${domain}`;
+                            document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${hostname}`;
+                            document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+                        }
+                    });
+
+                    DialogManager.showDialog({
+                        type: 'success',
+                        title: '清除完成',
+                        message: '页面即将刷新...',
+                        onConfirm: () => window.location.reload()
+                    });
+                    setTimeout(() => window.location.reload(), 1500);
+                }
+            });
+        }
+
+        return {
+            getCookie,
+            injectAndReload,
+            backupCookies,
+            importFromFile,
+            deleteAllCookies
+        };
+    })();
+
+    const AppFeatures = (function() {
+        function createWatermark() {
+            const authToken = CookieService.getCookie(COOKIE_KEYS.AUTH);
+            if (!authToken) return;
+
+            // 尝试获取用户ID显示
+            let displayText = 'Logged In';
+            const twid = CookieService.getCookie(COOKIE_KEYS.TWID);
+            if (twid) {
+                // 解码 twid (例如: u%3D12345) -> u=12345
+                const decoded = decodeURIComponent(twid);
+                const match = decoded.match(/u=([0-9]+)/);
+                if (match) {
+                    displayText = match[1];
+                }
+            }
+
+            const watermark = document.createElement('div');
+            watermark.id = SELECTORS.WATERMARK.substring(1);
+            watermark.innerHTML = `
+                ${ICONS.account_circle}
+                <span>${displayText}</span>
+                ${!isMobile ? `<span id="${SELECTORS.DATE_DISPLAY.substring(1)}" style="margin-left: 8px; font-weight:400; font-size:12px;">${new Date().toLocaleDateString()}</span>` : ''}
+            `;
+            document.body.appendChild(watermark);
+
+            // 简单的拖拽逻辑
+            let isDragging = false;
+            let offset = { x: 0, y: 0 };
+
+            const dragStart = (e) => {
+                isDragging = true;
+                const clientX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX;
+                const clientY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
+                const rect = watermark.getBoundingClientRect();
+                offset.x = clientX - rect.left;
+                offset.y = clientY - rect.top;
+                document.addEventListener('mousemove', dragMove);
+                document.addEventListener('touchmove', dragMove, { passive: false });
+                document.addEventListener('mouseup', dragEnd, { once: true });
+                document.addEventListener('touchend', dragEnd, { once: true });
+            };
+
+            const dragMove = (e) => {
+                if (!isDragging) return;
+                e.preventDefault();
+                const clientX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
+                const clientY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
+                watermark.style.left = `${clientX - offset.x}px`;
+                watermark.style.top = `${clientY - offset.y}px`;
+            };
+
+            const dragEnd = () => {
+                isDragging = false;
+                document.removeEventListener('mousemove', dragMove);
+                document.removeEventListener('touchmove', dragMove);
+            };
+
+            watermark.addEventListener('mousedown', dragStart);
+            watermark.addEventListener('touchstart', dragStart, { passive: false });
+        }
+
+        return {
+            init: function() {
+                createWatermark();
+            }
+        };
+    })();
+
+    function initialize() {
+        if (document.getElementById(SELECTORS.FAB.substring(1))) return;
+
+        UIManager.init();
+        AppFeatures.init();
+
+        const fab = UIManager.getFab();
+        
+        // FAB 点击与拖拽逻辑
+        let isDragging = false, wasDragged = false, offset = { x: 0, y: 0 };
+        const dragStart = (e) => {
+            isDragging = true;
+            fab.style.transition = 'none';
+            const clientX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX;
+            const clientY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
+            const rect = fab.getBoundingClientRect();
+            offset.x = clientX - rect.left;
+            offset.y = clientY - rect.top;
+            document.addEventListener('mousemove', dragMove);
+            document.addEventListener('touchmove', dragMove, { passive: false });
+            document.addEventListener('mouseup', dragEnd, { once: true });
+            document.addEventListener('touchend', dragEnd, { once: true });
+        };
+        const dragMove = (e) => {
+            if (!isDragging) return;
+            wasDragged = true;
+            e.preventDefault();
+            const clientX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
+            const clientY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
+            fab.style.left = `${clientX - offset.x}px`;
+            fab.style.top = `${clientY - offset.y}px`;
+            fab.style.right = 'auto';
+            fab.style.bottom = 'auto';
+        };
+        const dragEnd = () => {
+            isDragging = false;
+            fab.style.transition = '';
+            document.removeEventListener('mousemove', dragMove);
+            document.removeEventListener('touchmove', dragMove);
+            setTimeout(() => { wasDragged = false; }, 50);
+        };
+
+        fab.addEventListener('mousedown', dragStart);
+        fab.addEventListener('touchstart', dragStart, { passive: false });
+        fab.addEventListener('click', (e) => {
+            if (!wasDragged) UIManager.togglePanel();
+        });
+
+        // 按钮事件绑定
+        UIManager.getScrim().addEventListener('click', () => UIManager.togglePanel(false));
+        UIManager.getButton(SELECTORS.BTN_CLOSE).addEventListener('click', () => UIManager.togglePanel(false));
+        UIManager.getButton(SELECTORS.BTN_INJECT).addEventListener('click', CookieService.injectAndReload);
+        UIManager.getButton(SELECTORS.BTN_BACKUP).addEventListener('click', CookieService.backupCookies);
+        UIManager.getButton(SELECTORS.BTN_DELETE).addEventListener('click', CookieService.deleteAllCookies);
+        UIManager.getButton(SELECTORS.BTN_IMPORT).addEventListener('click', () => UIManager.getFileInputElement().click());
+        UIManager.getFileInputElement().addEventListener('change', (e) => CookieService.importFromFile(e.target));
+
+        console.log('🐦 Twitter/X Cookie Manager Loaded');
+    }
+
+    if (document.readyState === 'complete') {
+        initialize();
+    } else {
+        window.addEventListener('load', initialize);
+    }
+})();
